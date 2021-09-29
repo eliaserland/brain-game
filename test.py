@@ -52,6 +52,7 @@ def main():
 
     print(data)
     print(data.shape, type(data))
+    print("Done!")
 
 
 if __name__ == "__main__":
