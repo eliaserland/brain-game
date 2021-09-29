@@ -2,7 +2,7 @@
 
 ## Generera syntetiskt data i OpenBCI GUI:
 
- - Kör din OpenBCI executable.
+ - Kör din OpenBCI GUI executable.
  - Data Source: SYNTHETIC (Algorithmic)
  - Channel count: 8 chan
  - Start session.
