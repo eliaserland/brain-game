@@ -15,7 +15,7 @@
 	
 ## Ta emot synetiskt data i python:
 
- - kör testscriptet: `python3 test.py --board-id -1 --serial-port \[name of port]\`
+ - kör testscriptet: `python3 test.py --board-id -1 --serial-port [name of port]`
  - i mitt fall: `python3 test.py --board-id -1 --serial-port /dev/ttyS0`
  
 Board-ID:
