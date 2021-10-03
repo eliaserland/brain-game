@@ -1,23 +1,69 @@
-# Fixa anaconda environment för BrainFlow i Python
+# Get conda environment for BrainFlow in Python
 
-## Ladda ner anaconda (om du inte redan har det)
- - Följ instruktionerna för installation i ditt operativsystem på [docs.anaconda.com](https://docs.anaconda.com/anaconda/install/).
+## Download anaconda/miniconda (if you don't already have it)
+Choose between installing anaconda or miniconda. Both will give you access to the package manager `conda` and python, but anaconda contains ~250 pre-installed python packages (~4GB), while miniconda is simply `conda` with a minimal amount of dependencies. I personally would recommend miniconda, since it's quicker to install and does not contain packages you may not need. If you go through with the miniconda installer, you can always change your mind later and acquire the equivalent packages of anaconda by running `conda install anaconda`.
 
-## Skapa en ny envionment
- - `conda create --name braingame` och svara ja om du vill spara ditt environment på default location.
- - `conda activate braingame`
+Download links:
+ - [Anaconda](https://www.anaconda.com/products/individual)
+ - [Miniconda](https://docs.conda.io/en/latest/miniconda.html)
+
+Installation instructions anaconda/miniconda:
+ - [Linux](https://docs.conda.io/projects/continuumio-conda/en/latest/user-guide/install/linux.html)
+ - [MacOS](https://conda.io/projects/conda/en/latest/user-guide/install/macos.html)
+ - [Windows](https://docs.conda.io/projects/continuumio-conda/en/latest/user-guide/install/windows.html)
  
+The install process basically boils down to this:
+ 1. Download the appropriate installer.
+ 2. Optional, but recommended: [Verify installer hash](https://conda.io/projects/conda/en/latest/user-guide/install/download.html#hash-verification).
+Linux: `echo "<SHA256 hash> <installer>" | sha256sum --check`
 
-## Lägg till biblioteket BrainFlow i conda-miljön
+MacOS: `echo "<SHA256 hash> <installer>" | shasum -a 256 --check`
 
- - Installera pip i ditt environment: `conda install pip` 
- - Kör `which pip` (linux/macOS) eller `where pip` (windows) för att verifiera att när kommandot `pip` körs, så används den versionen av pip som är installerad i conda-miljön `braingame`. E.g.:
+Windows: `Get-FileHash <installer> -Algorithm SHA256`
+
+**Note!** Replace `<installer>` and `<SHA256 hash>` with the installer file and the appropriate hash found next to where you downloaded the installer. Example:
+```bash
+elias@xps13:~/Downloads$ echo "1ea2f885b4dbc3098662845560bc64271eb17085387a70c2ba3f29fff6f8d52f Miniconda3-latest-Linux-x86_64.sh" | sha256sum --check
+Miniconda3-latest-Linux-x86_64.sh: OK
+```
+
+ 3. Install:
+ 	- Linux: Navigate to the installer and run in your terminal:
+```bash
+bash <installer>.sh
+```
+ 	- MacOS: For anaconda, double-click the `.pkg` file. For miniconda, navigate to the installer and run in your terminal:
+```bash
+bash <installer>.sh
+```
+	- Windows: Double click the `.exe` file.
+ 	
+ 4. Follow the prompts on the installer screens.
+
+If you are unsure about any setting, accept the defaults. You can change them later.
+
+ 5. Reopen your terminal to make the changes take effect.
+ 
+ 6. Test your installation by running `conda list` in your terminal or in the anaconda prompt, a list of all installed packages should show up.
+
+ 7. Optional: If you don't want conda to automatically activate the base environment at startup, run the following line:
+```bash
+conda config --set auto_activate_base false
+```
+
+## Create a new envionment
+ - `conda create --name braingame` och answer yes if you want to save the environment at the default location.
+ - `conda activate braingame`
+
+## Get the BrainFlow library in your conda environment
+
+ - Install pip in your environment: `conda install pip` 
+ - Run `which pip` (Linux/MacOS) or `where pip` (Windows) to verify that when the command `pip` is executed, the version of pip installed in your conda environment `braingame` is used. E.g.: 
 ```bash
 (braingame) elias@xps13:~/Documents/brain-game$ which pip
 /home/elias/anaconda3/envs/braingame/bin/pip 
 ```
- - Installera brainflow: `python -m pip install brainflow`
- - Valfritt: Nu kan du också installera fler användbara bibilotek i din conda-miljö, såsom NumPy, SciPy, SciKit-Learn, Matplotlib osv. Exempel på installation: `conda install numpy scipy matplotlib scikit-learn`.
+ - Install brainflow: `python -m pip install brainflow`
+ - Optional: Install more useful python packages in your conda environment like NumPy, SciPy, SciKit-Learn, Matplotlib and so on. E.g.: `conda install numpy scipy matplotlib scikit-learn`.
  
- - Verifiera att brainflow finns tillgänglig i python. Starta python genom att köra `python` och där efter testa att importera brainflow med `import brainflow as bf`. Om du inte får något felmeddelande så bör allting fungera som det ska.
- 
+ - Verify that brainflow can be accessed in python. Start python by running `python` and try to import brainflow by running `import brainflow as bf`. If you do not get any error message, everything should be working as intended.
