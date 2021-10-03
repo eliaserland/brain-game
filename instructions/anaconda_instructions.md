@@ -15,11 +15,11 @@ Installation instructions anaconda/miniconda:
 The install process basically boils down to this:
  1. Download the appropriate installer.
  2. Optional, but recommended: [Verify installer hash](https://conda.io/projects/conda/en/latest/user-guide/install/download.html#hash-verification).
-	Linux: `echo "<SHA256 hash> <installer>" | sha256sum --check`
+	- Linux: `echo "<SHA256 hash> <installer>" | sha256sum --check`
 
-	MacOS: `echo "<SHA256 hash> <installer>" | shasum -a 256 --check`
+	- MacOS: `echo "<SHA256 hash> <installer>" | shasum -a 256 --check`
 
-	Windows: `Get-FileHash <installer> -Algorithm SHA256`
+	- Windows: `Get-FileHash <installer> -Algorithm SHA256`
 
 	**Note!** Replace `<installer>` and `<SHA256 hash>` with the installer file and the appropriate hash found next to where you downloaded the installer. Example:
 ```bash
