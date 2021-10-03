@@ -29,13 +29,13 @@ The install process basically boils down to this:
 
  3. Install:
 	 - Linux: Navigate to the installer and run in your terminal:
-```bash
-bash <installer>.sh
-```
+	```bash
+	bash <installer>.sh
+	```
 	 - MacOS: For anaconda, double-click the `.pkg` file. For miniconda, navigate to the installer and run in your terminal:
-```bash
-bash <installer>.sh
-```
+	```bash
+	bash <installer>.sh
+	```
 	 - Windows: Double click the `.exe` file.
  	
  4. Follow the prompts on the installer screens.
