@@ -40,16 +40,16 @@ The install process basically boils down to this:
  	
  4. Follow the prompts on the installer screens.
 
-If you are unsure about any setting, accept the defaults. You can change them later.
+	If you are unsure about any setting, accept the defaults. You can change them later.
 
  5. Reopen your terminal to make the changes take effect.
  
  6. Test your installation by running `conda list` in your terminal or in the anaconda prompt, a list of all installed packages should show up.
 
  7. Optional: If you don't want conda to automatically activate the base environment at startup, run the following line:
-```bash
-conda config --set auto_activate_base false
-```
+	```bash
+	conda config --set auto_activate_base false
+	```
 
 ## Create a new envionment
  - `conda create --name braingame` och answer yes if you want to save the environment at the default location.
