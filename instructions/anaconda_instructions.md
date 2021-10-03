@@ -22,10 +22,10 @@ The install process basically boils down to this:
 	- Windows: `Get-FileHash <installer> -Algorithm SHA256`
 
 	**Note!** Replace `<installer>` and `<SHA256 hash>` with the installer file and the appropriate hash found next to where you downloaded the installer. Example:
-```bash
-elias@xps13:~/Downloads$ echo "1ea2f885b4dbc3098662845560bc64271eb17085387a70c2ba3f29fff6f8d52f Miniconda3-latest-Linux-x86_64.sh" | sha256sum --check
-Miniconda3-latest-Linux-x86_64.sh: OK
-```
+	```bash
+	elias@xps13:~/Downloads$ echo "1ea2f885b4dbc3098662845560bc64271eb17085387a70c2ba3f29fff6f8d52f Miniconda3-latest-Linux-x86_64.sh" | sha256sum --check
+	Miniconda3-latest-Linux-x86_64.sh: OK
+	```
 
  3. Install:
 	 - Linux: Navigate to the installer and run in your terminal:
