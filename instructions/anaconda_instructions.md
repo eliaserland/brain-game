@@ -15,28 +15,28 @@ Installation instructions anaconda/miniconda:
 The install process basically boils down to this:
  1. Download the appropriate installer.
  2. Optional, but recommended: [Verify installer hash](https://conda.io/projects/conda/en/latest/user-guide/install/download.html#hash-verification).
-Linux: `echo "<SHA256 hash> <installer>" | sha256sum --check`
+	Linux: `echo "<SHA256 hash> <installer>" | sha256sum --check`
 
-MacOS: `echo "<SHA256 hash> <installer>" | shasum -a 256 --check`
+	MacOS: `echo "<SHA256 hash> <installer>" | shasum -a 256 --check`
 
-Windows: `Get-FileHash <installer> -Algorithm SHA256`
+	Windows: `Get-FileHash <installer> -Algorithm SHA256`
 
-**Note!** Replace `<installer>` and `<SHA256 hash>` with the installer file and the appropriate hash found next to where you downloaded the installer. Example:
+	**Note!** Replace `<installer>` and `<SHA256 hash>` with the installer file and the appropriate hash found next to where you downloaded the installer. Example:
 ```bash
 elias@xps13:~/Downloads$ echo "1ea2f885b4dbc3098662845560bc64271eb17085387a70c2ba3f29fff6f8d52f Miniconda3-latest-Linux-x86_64.sh" | sha256sum --check
 Miniconda3-latest-Linux-x86_64.sh: OK
 ```
 
  3. Install:
- 	- Linux: Navigate to the installer and run in your terminal:
+	 - Linux: Navigate to the installer and run in your terminal:
 ```bash
 bash <installer>.sh
 ```
- 	- MacOS: For anaconda, double-click the `.pkg` file. For miniconda, navigate to the installer and run in your terminal:
+	 - MacOS: For anaconda, double-click the `.pkg` file. For miniconda, navigate to the installer and run in your terminal:
 ```bash
 bash <installer>.sh
 ```
-	- Windows: Double click the `.exe` file.
+	 - Windows: Double click the `.exe` file.
  	
  4. Follow the prompts on the installer screens.
 
