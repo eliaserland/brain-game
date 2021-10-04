@@ -79,4 +79,4 @@ jupyter-lab
 ```
 Select ipykernel as the active kernel for the notebook, and all libraries we installed earlier should be available.
 
-That's it, good luck!
+That's it, good luck coding! 
