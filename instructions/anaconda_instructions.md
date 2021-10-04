@@ -67,3 +67,16 @@ The install process basically boils down to this:
  - Optional: Install more useful python packages in your conda environment like NumPy, SciPy, SciKit-Learn, Matplotlib and so on. E.g.: `conda install numpy scipy matplotlib scikit-learn`.
  
  - Verify that brainflow can be accessed in python. Start python by running `python` and try to import brainflow by running `import brainflow as bf`. If you do not get any error message, everything should be working as intended.
+
+## Jupyter notebook support
+Optionally, one can work with a jupyter notebook instead during the development phase. To download and install Jupyter-Lab (the official successor to the classical Jupyter Notebook) within the conda environment, run the command:
+```bash
+conda install -c conda-forge jupyterlab
+```
+Start Jupyter-Lab by running:
+```bash
+jupyter-lab
+```
+Select ipykernel as the active kernel for the notebook, and all libraries we installed earlier should be available.
+
+That's it, good luck!
