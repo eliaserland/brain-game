@@ -69,7 +69,7 @@ The install process basically boils down to this:
  - Verify that brainflow can be accessed in python. Start python by running `python` and try to import brainflow by running `import brainflow as bf`. If you do not get any error message, everything should be working as intended.
 
 ## Jupyter notebook support
-Optionally, one can work with a jupyter notebook instead during the development phase. To download and install Jupyter-Lab (the official successor to the classical Jupyter Notebook) within the conda environment, run the command:
+Optionally, one can work with a jupyter notebook during the development phase, instead of executing python scripts via command line. To download and install Jupyter-Lab (the official successor to the classical Jupyter Notebook) within the conda environment, run the command:
 ```bash
 conda install -c conda-forge jupyterlab
 ```
@@ -80,3 +80,7 @@ jupyter-lab
 Select ipykernel as the active kernel for the notebook, and all libraries we installed earlier should be available.
 
 That's it, good luck coding! 
+
+## Graphical real-time plotting in Python
+ - `conda install -c conda-forge pyqtgraph`
+
