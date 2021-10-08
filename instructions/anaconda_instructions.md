@@ -83,4 +83,5 @@ That's it, good luck coding!
 
 ## Graphical real-time plotting in Python
  - `conda install -c conda-forge pyqtgraph`
+ - `pip install PyOpenGL PyOpenGL_accelerate`
 
