@@ -1,3 +1,5 @@
+# OBS: Dessa instruktioner är felaktiga och funkar inte i nuläget. Ska försöka åtgärda detta senare.
+
 # Generera och ta emot syntetiskt data OpenBCI GUI -> python
 
 Först se till att du har brainflow-biblioteket installerat, se anaconda-instruktionerna för installation i en virtuell conda-miljö. OpenBCI GUI:t kan hämtas på [deras hemsida](https://openbci.com/downloads).

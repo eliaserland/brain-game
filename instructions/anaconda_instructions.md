@@ -37,7 +37,7 @@ The install process basically boils down to this:
 	bash <installer>.sh
 	```
 	 - Windows: Double click the `.exe` file.
- 	
+
  4. Follow the prompts on the installer screens.
 
 	If you are unsure about any setting, accept the defaults. You can change them later.
@@ -82,6 +82,9 @@ Select ipykernel as the active kernel for the notebook, and all libraries we ins
 That's it, good luck coding! 
 
 ## Graphical real-time plotting in Python
+In order to run the PyQtGraph-based scripts `main.py` and `real_time_plot.py`, the `pyqtgraph`-package needs to be installed:
  - `conda install -c conda-forge pyqtgraph`
+
+Not neccessary for the above scripts, but required for 3D-graphics in pyqtgraph:
  - `pip install PyOpenGL PyOpenGL_accelerate`
 
