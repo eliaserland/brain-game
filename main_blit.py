@@ -9,12 +9,85 @@ from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds, Brai
 from brainflow.data_filter import DataFilter, FilterTypes, AggOperations, WindowFunctions, DetrendOperations
 
 from matplotlib import pyplot as plt
-logging.getLogger('matplotlib.font_manager').disabled = True
+logging.getLogger('matplotlib').disabled = True
 
 programName = 'BrainGame Curiosum'
 
-fps = None
+fps = -1
 lastTime = time.time()
+
+
+class BlitManager:
+    def __init__(self, canvas, animated_artists=()):
+        """
+        Parameters
+        ----------
+        canvas : FigureCanvasAgg
+            The canvas to work with, this only works for sub-classes of the Agg
+            canvas which have the `~FigureCanvasAgg.copy_from_bbox` and
+            `~FigureCanvasAgg.restore_region` methods.
+
+        animated_artists : Iterable[Artist]
+            List of the artists to manage
+        """
+        self.canvas = canvas
+        self._bg = None
+        self._artists = []
+
+        for a in animated_artists:
+            self.add_artist(a)
+        # grab the background on every draw
+        self.cid = canvas.mpl_connect("draw_event", self.on_draw)
+
+    def on_draw(self, event):
+        """Callback to register with 'draw_event'."""
+        cv = self.canvas
+        if event is not None:
+            if event.canvas != cv:
+                raise RuntimeError
+        self._bg = cv.copy_from_bbox(cv.figure.bbox)
+        self._draw_animated()
+
+    def add_artist(self, art):
+        """
+        Add an artist to be managed.
+
+        Parameters
+        ----------
+        art : Artist
+
+            The artist to be added.  Will be set to 'animated' (just
+            to be safe).  *art* must be in the figure associated with
+            the canvas this class is managing.
+
+        """
+        if art.figure != self.canvas.figure:
+            raise RuntimeError
+        art.set_animated(True)
+        self._artists.append(art)
+
+    def _draw_animated(self):
+        """Draw all of the animated artists."""
+        fig = self.canvas.figure
+        for a in self._artists:
+            fig.draw_artist(a)
+
+    def update(self):
+        """Update the screen with animated artists."""
+        cv = self.canvas
+        fig = cv.figure
+        # paranoia in case we missed the draw event,
+        if self._bg is None:
+            self.on_draw(None)
+        else:
+            # restore the background
+            cv.restore_region(self._bg)
+            # draw all of the animated artists
+            self._draw_animated()
+            # update the GUI state
+            cv.blit(fig.bbox)
+        # let the GUI event loop process anything it has to do
+        cv.flush_events()
 
 class Graph:
 	def __init__(self, board_shim):
@@ -22,8 +95,7 @@ class Graph:
 		self.board_shim = board_shim
 		self.exg_channels = BoardShim.get_exg_channels(self.board_id)
 		self.sampling_rate = BoardShim.get_sampling_rate(self.board_id)
-		self.update_speed_ms = 10
-		self.window_size = 4 
+		self.window_size = 5
 		self.num_points = self.window_size * self.sampling_rate
 		self.time_stamp_channel = BoardShim.get_timestamp_channel(self.board_id)
 		self.data = np.zeros((BoardShim.get_num_rows(self.board_id), self.num_points))
@@ -41,39 +113,51 @@ class Graph:
 			self.update()
 
 	def _init_timeseries(self):
-		ylim = 20
-		self.plots = list()
-		self.curves = list()
+		
+		ylim = 200 * 1.1
+		
+		# Create a figure
+		fig, axes = plt.subplots(len(self.exg_channels), 1, figsize=(6, 6), sharex=True)
+		axes = axes.flatten()
 
-		fig, axes = plt.subplots(len(self.exg_channels), 1, figsize=(8, 8))
+		# Set sequential colormap
+		#cmap = 'viridis'
+		#colors = getattr(plt.cm, cmap)(np.linspace(0,1,len(axes)))
+		colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+
+		# Add all lines 
 		ln = list()
 		for i, ax in enumerate(axes):
-			(ln_tmp,) = ax.plot(self.time, self.data[i], animated=True, linewidth=1.)
+			(ln_tmp,) = ax.plot(self.time, self.data[i], animated=True, linewidth=0.8, color=colors[i])
 			ln.append(ln_tmp)
-			ax.set_ylim(-200, 200)
+			ax.set_ylim(-ylim, ylim)
+			ax.set_xlim(np.min(self.time)*1.001, np.max(self.time))
+			ax.tick_params(axis='x', labelsize=6)
+			ax.tick_params(axis='y', labelsize=6)
+			ax.set_ylabel("Pot (uV)", fontsize=6)
+			if i == len(axes)-1:
+				ax.set_xlabel("Time (s)", fontsize=6)
 
+		# Add an FPS counter
+		fr_number = axes[0].set_title("0")
+
+		# Create the blitting manager, save all artists
+		self.bm = BlitManager(fig.canvas, ln + [fr_number])
+		self.ln = ln
+		self.fr_number = fr_number
+
+		# Make sure the window is on the screen and drawn
 		plt.show(block=False)
 		plt.pause(0.1)
 
-		bg = fig.canvas.copy_from_bbox(fig.bbox)
-
-		for i, ax in enumerate(axes):
-			ax.draw_artist(ln[i])
-		fig.canvas.blit(fig.bbox)
-
 		# Set trigger when when window is closed.
 		fig.canvas.mpl_connect('close_event', self._on_close)
+		fig.canvas.manager.set_window_title(programName)
 
-		self.fig = fig
-		self.axes = axes
-		self.ln = ln
-		self.bg = bg
 		print("----INITIALIZATION COMPLETED----")
-
 
 	def _on_close(self, event):
 		self.running = False
-
 
 	def update(self):
 		global fps, lastTime
@@ -82,19 +166,20 @@ class Graph:
 		series_len = board_data.shape[1]
 		self.data[:, (self.num_points-series_len):] = board_data
 
-		self.fig.canvas.restore_region(self.bg)
+		# Update the artists
 		for i, channel in enumerate(self.exg_channels):
 			self.ln[i].set_ydata(self.data[channel])
-		for i, ax in enumerate(self.axes):
-			ax.draw_artist(self.ln[i])
 
-		self.fig.canvas.blit(self.fig.bbox)
-		self.fig.canvas.flush_events()
+		self.fr_number.set_text(f"{fps:0.2f} fps")
 		
+		# Tell the blitting manager to do its thing
+		self.bm.update()
+
+		# Calculate frames per second
 		now = time.time()
 		dt = now - lastTime
 		lastTime = now
-		if fps is None:
+		if fps == -1:
 			fps = 1.0/dt
 		else:
 			s = np.clip(dt*3., 0, 1)
@@ -105,7 +190,7 @@ class Graph:
 def main():
 	# Set logging level.
 	BoardShim.enable_dev_board_logger()
-	logging.basicConfig(level=logging.DEBUG)
+	#logging.basicConfig(level=logging.DEBUG)
 
 	# Parse command line arguments. Use docs to check which parameters are 
 	# required for specific board, e.g. for Cyton - set serial port.
