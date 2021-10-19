@@ -6,6 +6,7 @@ import numpy as np
 
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtGui, QtCore
+import pyqtgraph.ptime as ptime
 
 import brainflow
 from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds, BrainFlowError
@@ -14,8 +15,14 @@ from brainflow.data_filter import DataFilter, FilterTypes, AggOperations, Window
 # My stuff
 import matplotlib.pyplot as plt
 
+pg.setConfigOption('background', 'w')
+pg.setConfigOption('foreground', 'k')
+
 programName = 'BrainGame Curiosum'
 time_init = time.time()
+
+fps = None
+lastTime = ptime.time()
 
 class Graph:
 	def __init__(self, board_shim):
@@ -23,7 +30,7 @@ class Graph:
 		self.board_shim = board_shim
 		self.exg_channels = BoardShim.get_exg_channels(self.board_id)
 		self.sampling_rate = BoardShim.get_sampling_rate(self.board_id)
-		self.update_speed_ms = 5
+		self.update_speed_ms = 10
 		self.window_size = 5 
 		self.num_points = self.window_size * self.sampling_rate
 		self.time_stamp_channel = BoardShim.get_timestamp_channel(self.board_id)
@@ -39,6 +46,9 @@ class Graph:
 
 		self.app = QtGui.QApplication([])
 		self.win = pg.GraphicsWindow(title=programName,size=(1200, 1000))
+		# Enable antialiasing for prettier plots
+		#pg.setConfigOptions(antialias=True)
+
 
 		self._init_timeseries()
 
@@ -65,10 +75,11 @@ class Graph:
 			if i == 0:
 				p.setTitle('TimeSeries Plot')
 			self.plots.append(p)
-			curve = p.plot()
+			curve = p.plot(pen=pg.mkPen('k', width=2))
 			self.curves.append(curve)
 
 	def update(self):
+		global fps, lastTime
 		# Get data from board
 		board_data = self.board_shim.get_current_board_data(self.num_points)
 
@@ -78,18 +89,29 @@ class Graph:
 		avg_bands = [0, 0, 0, 0, 0]
 		for count, channel in enumerate(self.exg_channels):
 			# plot timeseries
-			#DataFilter.detrend(data[channel], DetrendOperations.CONSTANT.value)
-			#DataFilter.perform_bandpass(data[channel], self.sampling_rate, 51.0, 100.0, 2,
+			#DataFilter.detrend(self.data[channel], DetrendOperations.CONSTANT.value)
+			#DataFilter.perform_bandpass(self.data[channel], self.sampling_rate, 51.0, 100.0, 2,
+			#						FilterTypes.BUTTERWORTH.value, 0)
+			#DataFilter.perform_bandpass(self.data[channel], self.sampling_rate, 51.0, 100.0, 2,
 			#							FilterTypes.BUTTERWORTH.value, 0)
-			#DataFilter.perform_bandpass(data[channel], self.sampling_rate, 51.0, 100.0, 2,
+			#DataFilter.perform_bandstop(self.data[channel], self.sampling_rate, 50.0, 4.0, 2,
 			#							FilterTypes.BUTTERWORTH.value, 0)
-			#DataFilter.perform_bandstop(data[channel], self.sampling_rate, 50.0, 4.0, 2,
+			#DataFilter.perform_bandstop(self.data[channel], self.sampling_rate, 60.0, 4.0, 2,
 			#							FilterTypes.BUTTERWORTH.value, 0)
-			#DataFilter.perform_bandstop(data[channel], self.sampling_rate, 60.0, 4.0, 2,
-			#							FilterTypes.BUTTERWORTH.value, 0)
-			self.curves[count].setData(self.time, self.data[channel].tolist())
+			self.curves[count].setData(self.time, self.data[channel])
 
-		self.app.processEvents()
+		#self.app.processEvents()
+
+		now = ptime.time()
+		dt = now - lastTime
+		lastTime = now
+		if fps is None:
+			fps = 1.0/dt
+		else:
+			s = np.clip(dt*3., 0, 1)
+			fps = fps * (1-s) + (1.0/dt) * s
+		print('%0.2f fps' % fps)
+		#self.app.processEvents()  ## force complete redraw for every plot
 
 def main():
 	# Set logging level.
