@@ -2,6 +2,7 @@ import argparse
 import time
 import logging
 import random
+import numpy as np
 
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtGui, QtCore
@@ -13,7 +14,8 @@ from brainflow.data_filter import DataFilter, FilterTypes, AggOperations, Window
 # My stuff
 import matplotlib.pyplot as plt
 
-
+programName = 'BrainGame Curiosum'
+time_init = time.time()
 
 class Graph:
 	def __init__(self, board_shim):
@@ -22,16 +24,21 @@ class Graph:
 		self.exg_channels = BoardShim.get_exg_channels(self.board_id)
 		self.sampling_rate = BoardShim.get_sampling_rate(self.board_id)
 		self.update_speed_ms = 5
-		self.window_size = 5
+		self.window_size = 5 
 		self.num_points = self.window_size * self.sampling_rate
+		self.time_stamp_channel = BoardShim.get_timestamp_channel(self.board_id)
+		self.data = np.zeros((BoardShim.get_num_rows(self.board_id), self.num_points))
+		self.time = list(reversed(-np.arange(0, self.num_points)/self.sampling_rate))
+		
 
+		print("NUM_POINTS = " + str(self.num_points))
+
+		# ONLY TEMP
 		self.exg_channels = [1, 2, 3, 4, 5, 6, 7, 8]
 		
-		for count, channel in enumerate(self.exg_channels):
-			print(count, channel)
 
 		self.app = QtGui.QApplication([])
-		self.win = pg.GraphicsWindow(title='BrainFlow Plot',size=(800, 600))
+		self.win = pg.GraphicsWindow(title=programName,size=(1200, 1000))
 
 		self._init_timeseries()
 
@@ -42,14 +49,19 @@ class Graph:
 
 
 	def _init_timeseries(self):
+		ylim = 20
 		self.plots = list()
 		self.curves = list()
 		for i in range(len(self.exg_channels)):
 			p = self.win.addPlot(row=i,col=0)
 			p.showAxis('left', True)
-			p.setMenuEnabled('left', True)
+			p.setMenuEnabled('left', False)
 			p.showAxis('bottom', True)
 			p.setMenuEnabled('bottom', True)
+			p.setYRange(-ylim, ylim, padding=5)
+
+			p.setLabel('left', "Pot", units='uV')	
+			p.setLabel('bottom', "Time", units='s')
 			if i == 0:
 				p.setTitle('TimeSeries Plot')
 			self.plots.append(p)
@@ -57,40 +69,27 @@ class Graph:
 			self.curves.append(curve)
 
 	def update(self):
-		data = self.board_shim.get_current_board_data(self.num_points)
-		print(data.shape)
+		# Get data from board
+		board_data = self.board_shim.get_current_board_data(self.num_points)
+
+		series_len = board_data.shape[1]
+		self.data[:, (self.num_points-series_len):] = board_data
+
 		avg_bands = [0, 0, 0, 0, 0]
 		for count, channel in enumerate(self.exg_channels):
 			# plot timeseries
 			#DataFilter.detrend(data[channel], DetrendOperations.CONSTANT.value)
-			DataFilter.perform_bandpass(data[channel], self.sampling_rate, 51.0, 100.0, 2,
-										FilterTypes.BUTTERWORTH.value, 0)
-			DataFilter.perform_bandpass(data[channel], self.sampling_rate, 51.0, 100.0, 2,
-										FilterTypes.BUTTERWORTH.value, 0)
-			DataFilter.perform_bandstop(data[channel], self.sampling_rate, 50.0, 4.0, 2,
-										FilterTypes.BUTTERWORTH.value, 0)
-			DataFilter.perform_bandstop(data[channel], self.sampling_rate, 60.0, 4.0, 2,
-										FilterTypes.BUTTERWORTH.value, 0)
-			self.curves[count].setData(data[channel].tolist())
+			#DataFilter.perform_bandpass(data[channel], self.sampling_rate, 51.0, 100.0, 2,
+			#							FilterTypes.BUTTERWORTH.value, 0)
+			#DataFilter.perform_bandpass(data[channel], self.sampling_rate, 51.0, 100.0, 2,
+			#							FilterTypes.BUTTERWORTH.value, 0)
+			#DataFilter.perform_bandstop(data[channel], self.sampling_rate, 50.0, 4.0, 2,
+			#							FilterTypes.BUTTERWORTH.value, 0)
+			#DataFilter.perform_bandstop(data[channel], self.sampling_rate, 60.0, 4.0, 2,
+			#							FilterTypes.BUTTERWORTH.value, 0)
+			self.curves[count].setData(self.time, self.data[channel].tolist())
 
 		self.app.processEvents()
-
-class Plot:
-	def __init__(self, board_shim):
-		# Save board_shim and associated values.
-		self.board_shim = board_shim
-		self.board_id = board_shim.get_board_id()
-		self.exg_channels = BoardShim.get_exg_channels(self.board_id)
-		self.sampling_rate = BoardShim.get_sampling_rate(self.board_id)
-		
-		# 
-		self.update_speed_ms = 50
-		self.window_size = 4
-		self.num_points = self.window_size * self.sampling_rate
-
-		self.app = QtGui.QApplication([])
-		self.win = pg.GraphicsWindow(title='BrainFlow Plot',size=(800, 600))
-
 
 def main():
 	# Set logging level.
