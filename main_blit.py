@@ -1,12 +1,10 @@
 import argparse
 import time
 import logging
-import random
 import numpy as np
 
-import brainflow
 from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds, BrainFlowError
-from brainflow.data_filter import DataFilter, FilterTypes, AggOperations, WindowFunctions, DetrendOperations
+#from brainflow.data_filter import DataFilter, FilterTypes, AggOperations, WindowFunctions, DetrendOperations
 
 from matplotlib import pyplot as plt
 logging.getLogger('matplotlib').disabled = True
@@ -15,7 +13,6 @@ programName = 'BrainGame Curiosum'
 
 fps = -1
 lastTime = time.time()
-
 
 class BlitManager:
     def __init__(self, canvas, animated_artists=()):
