@@ -3,8 +3,12 @@ import time
 import logging
 import numpy as np
 
+#import pyqtgraph as pg
+#from pyqtgraph.Qt import QtGui, QtCore
+#import pyqtgraph.ptime as ptime
+
 from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds, BrainFlowError
-#from brainflow.data_filter import DataFilter, FilterTypes, AggOperations, WindowFunctions, DetrendOperations
+from brainflow.data_filter import DataFilter, FilterTypes, AggOperations, WindowFunctions, DetrendOperations
 
 from matplotlib import pyplot as plt
 logging.getLogger('matplotlib').disabled = True
@@ -98,8 +102,9 @@ class Graph:
 		self.data = np.zeros((BoardShim.get_num_rows(self.board_id), self.num_points))
 		self.time = list(reversed(-np.arange(0, self.num_points)/self.sampling_rate))
 		
-		# ONLY TEMPORARY
-		self.exg_channels = [1, 2, 3, 4, 5, 6, 7, 8]
+		# Limit no. of channels in testing with synthetic data
+		if self.board_id == BoardIds.SYNTHETIC_BOARD:
+			self.exg_channels = [1, 2, 3, 4, 5, 6, 7, 8]
 		
 		# Initialize plots
 		self._init_timeseries()
@@ -162,6 +167,18 @@ class Graph:
 		board_data = self.board_shim.get_current_board_data(self.num_points)
 		series_len = board_data.shape[1]
 		self.data[:, (self.num_points-series_len):] = board_data
+
+		# Data processing: Manipulate self.data 
+		for i, channel in enumerate(self.exg_channels):
+			DataFilter.detrend(self.data[channel], DetrendOperations.CONSTANT.value)
+			DataFilter.perform_bandpass(self.data[channel], self.sampling_rate, 51.0, 100.0, 2,
+									FilterTypes.BUTTERWORTH.value, 0)
+			DataFilter.perform_bandpass(self.data[channel], self.sampling_rate, 51.0, 100.0, 2,
+										FilterTypes.BUTTERWORTH.value, 0)
+			DataFilter.perform_bandstop(self.data[channel], self.sampling_rate, 50.0, 4.0, 2,
+										FilterTypes.BUTTERWORTH.value, 0)
+			DataFilter.perform_bandstop(self.data[channel], self.sampling_rate, 60.0, 4.0, 2,
+										FilterTypes.BUTTERWORTH.value, 0)
 
 		# Update the artists
 		for i, channel in enumerate(self.exg_channels):
