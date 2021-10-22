@@ -3,12 +3,15 @@ import time
 import logging
 import numpy as np
 
+from collections import deque
+
 #import pyqtgraph as pg
 #from pyqtgraph.Qt import QtGui, QtCore
 #import pyqtgraph.ptime as ptime
 
 from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds, BrainFlowError
 from brainflow.data_filter import DataFilter, FilterTypes, AggOperations, NoiseTypes, WindowFunctions, DetrendOperations
+from brainflow.ml_model import BrainFlowMetrics, BrainFlowClassifiers, BrainFlowModelParams, MLModel
 
 from matplotlib import pyplot as plt
 from matplotlib.gridspec import GridSpec
@@ -95,20 +98,28 @@ class Graph:
 	def __init__(self, board_shim):
 		self.board_id = board_shim.get_board_id()
 		self.board_shim = board_shim
-		self.exg_channels = BoardShim.get_exg_channels(self.board_id)
+		self.eeg_channels = BoardShim.get_eeg_channels(self.board_id)
 		self.sampling_rate = BoardShim.get_sampling_rate(self.board_id)
 		self.window_size = 5
 		self.num_points = self.window_size * self.sampling_rate
-		self.time_stamp_channel = BoardShim.get_timestamp_channel(self.board_id)
+		self.timestamp_channel = BoardShim.get_timestamp_channel(self.board_id)
 		self.data = np.zeros((BoardShim.get_num_rows(self.board_id), self.num_points))
 		self.time = list(reversed(-np.arange(0, self.num_points)/self.sampling_rate))
 		
+		self.metric = deque([0], maxlen=self.num_points)
+		self.metric_time = deque([time.time()], maxlen=self.num_points)
+		
 		# Limit no. of channels if testing with synthetic data
 		if self.board_id == BoardIds.SYNTHETIC_BOARD:
-			self.exg_channels = [1, 2, 3, 4, 5, 6, 7, 8]
+			self.eeg_channels = [1, 2, 3, 4, 5] #, 6, 7, 8]
 		
 		# Initialize plots
 		self._init_timeseries()
+
+		# Initialize ML model
+		self._init_ml_model()
+
+		print("----INITIALIZATION COMPLETED----")
 
 		# Update plots, until program end.
 		self.running = True
@@ -116,12 +127,30 @@ class Graph:
 			self.update()
 
 	def _init_timeseries(self):
-		
+		"""Initialize the time series and associated plots."""
+		# Window limits of time series plot.
 		ylim = 200 * 1.1
 		
-		# Create a figure
-		fig, axes = plt.subplots(len(self.exg_channels), 1, figsize=(6, 6), sharex=True)
-		axes = axes.flatten()
+		# Create a figure.
+		fig = plt.figure(constrained_layout=True)
+		
+		# Set gridspec for custom subplot layout.
+		gs = GridSpec(len(self.eeg_channels), 2, figure=fig)
+		axes = []
+		# Create axes for the left column of time series plot.
+		for i in range(len(self.eeg_channels)):
+			ax = fig.add_subplot(gs[i, 0])
+			axes.append(ax)
+
+		# Right column
+		ax = fig.add_subplot(gs[:len(self.eeg_channels)//2, 1])
+		axes.append(ax)
+		ax = fig.add_subplot(gs[len(self.eeg_channels)//2:, 1])
+		axes.append(ax)
+
+
+		#fig, axes = plt.subplots(len(self.eeg_channels), 1, figsize=(6, 6), sharex=True)
+		#axes = axes.flatten()
 
 		# Set sequential colormap
 		#cmap = 'viridis'
@@ -131,15 +160,21 @@ class Graph:
 		# Add all lines 
 		ln = list()
 		for i, ax in enumerate(axes):
-			(ln_tmp,) = ax.plot(self.time, self.data[i], animated=True, linewidth=0.8, color=colors[i])
-			ln.append(ln_tmp)
-			ax.set_ylim(-ylim, ylim)
-			ax.set_xlim(np.min(self.time)*1.001, np.max(self.time))
-			ax.tick_params(axis='x', labelsize=6)
-			ax.tick_params(axis='y', labelsize=6)
-			ax.set_ylabel("Pot (uV)", fontsize=6)
-			if i == len(axes)-1:
-				ax.set_xlabel("Time (s)", fontsize=6)
+			if i < len(self.eeg_channels):
+				(ln_tmp,) = ax.plot(self.time, self.data[self.eeg_channels[i]], animated=True, linewidth=0.8, color=colors[i%10])
+				ln.append(ln_tmp)
+				ax.set_ylim(-ylim, ylim)
+				ax.set_xlim(np.min(self.time)*1.001, np.max(self.time))
+				ax.tick_params(axis='x', labelsize=6)
+				ax.tick_params(axis='y', labelsize=6)
+				ax.set_ylabel("Pot (uV)", fontsize=6)
+				if i == len(self.eeg_channels)-1:
+					ax.set_xlabel("Time (s)", fontsize=6)
+			else:
+				(ln_tmp,) = ax.plot([0], self.metric, animated=True, linewidth=0.8, color=colors[i%10])
+				ln.append(ln_tmp)
+				ax.set_ylim(-0.01, 1.01)
+				ax.set_xlim(-10, 0)
 
 		# Add an FPS counter
 		fr_number = axes[0].set_title("0")
@@ -157,10 +192,22 @@ class Graph:
 		fig.canvas.mpl_connect('close_event', self._on_close)
 		fig.canvas.manager.set_window_title(programName)
 
-		print("----INITIALIZATION COMPLETED----")
+
+	def _init_ml_model(self):
+		"""Initialize the BrainFlow Machine Learning model."""
+		# Get model parameters.
+		self.model_params = BrainFlowModelParams(BrainFlowMetrics.RELAXATION, BrainFlowClassifiers.REGRESSION)
+		# Create the model.
+		self.model = MLModel(self.model_params)
+		# Set log level and prepare the classifier.
+		self.model.enable_ml_logger()
+		self.model.prepare()
+
 
 	def _on_close(self, event):
+		"""Tasks to perform on app closing event."""
 		self.running = False
+		self.model.release()
 
 	def update(self):
 		global fps, lastTime
@@ -168,23 +215,23 @@ class Graph:
 		data = self.board_shim.get_current_board_data(self.num_points)
 
 		# Data filtering: Manipulate the data array 
-		for i, channel in enumerate(self.exg_channels):
+		for i, channel in enumerate(self.eeg_channels):
 			# Notch filter, remove 50Hz AC interference.
 			DataFilter.remove_environmental_noise(data[channel], self.sampling_rate, NoiseTypes.FIFTY)
 
 
-			DataFilter.detrend(data[channel], DetrendOperations.CONSTANT.value)
-			DataFilter.perform_bandpass(data[channel], self.sampling_rate, 51.0, 100.0, 2,
-									FilterTypes.BUTTERWORTH.value, 0)
-			DataFilter.perform_bandpass(data[channel], self.sampling_rate, 51.0, 100.0, 2,
-										FilterTypes.BUTTERWORTH.value, 0)
-			DataFilter.perform_bandstop(data[channel], self.sampling_rate, 50.0, 4.0, 2,
-										FilterTypes.BUTTERWORTH.value, 0)
-			DataFilter.perform_bandstop(data[channel], self.sampling_rate, 60.0, 4.0, 2,
-										FilterTypes.BUTTERWORTH.value, 0)
+			#DataFilter.detrend(data[channel], DetrendOperations.CONSTANT.value)
+			#DataFilter.perform_bandpass(data[channel], self.sampling_rate, 51.0, 100.0, 2,
+			#						FilterTypes.BUTTERWORTH.value, 0)
+			#DataFilter.perform_bandpass(data[channel], self.sampling_rate, 51.0, 100.0, 2,
+			#							FilterTypes.BUTTERWORTH.value, 0)
+			#DataFilter.perform_bandstop(data[channel], self.sampling_rate, 50.0, 4.0, 2,
+			#							FilterTypes.BUTTERWORTH.value, 0)
+			#DataFilter.perform_bandstop(data[channel], self.sampling_rate, 60.0, 4.0, 2,
+			#							FilterTypes.BUTTERWORTH.value, 0)
 
 		# Data processing:
-		for i, channel in enumerate(self.exg_channels):
+		for i, channel in enumerate(self.eeg_channels):
 			# Fast Fourier Transform:
 			# FFT-alg can only accept an array with lenght equal to a power of 2.
 			length = data.shape[1]
@@ -192,13 +239,27 @@ class Graph:
 			freq = DataFilter.perform_fft(data[channel, length-n:], WindowFunctions.HANNING)
 #		print(freq.shape)
 
+		# Get metric prediction from the ML model
+		bands = DataFilter.get_avg_band_powers(data, self.eeg_channels, self.sampling_rate, True)
+		feature_vector = np.concatenate((bands[0], bands[1]))
+		metric = self.model.predict(feature_vector)
+
+		# Get time and append to the appropriate lists
+		metric_time = data[self.timestamp_channel, -1]
+		self.metric.append(metric)
+		self.metric_time.append(metric_time)
+
 		# Merge into self.data
 		series_len = data.shape[1]
 		self.data[:, (self.num_points-series_len):] = data
 
-		# Update the artists
-		for i, channel in enumerate(self.exg_channels):
+		# Update the artists:
+		for i, channel in enumerate(self.eeg_channels):
 			self.ln[i].set_ydata(self.data[channel])
+
+		rel_time = np.array(self.metric_time)-metric_time
+		self.ln[-1].set_ydata(self.metric)
+		self.ln[-1].set_xdata(rel_time)
 
 		self.fr_number.set_text(f"{fps:0.2f} fps")
 		
@@ -217,7 +278,7 @@ class Graph:
 		print(f" {fps:0.2f} fps", end='\r')
 
 def smallest_power(x):
-	"Return the smallest power of 2, smaller than or equal to x."
+	"""Return the smallest power of 2, smaller than or equal to x."""
 	return 0 if x == 0 or x == 1 else  1<<(x.bit_length()-1)
 
 def main():
