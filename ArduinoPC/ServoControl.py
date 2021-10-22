@@ -1,9 +1,10 @@
 #-*- coding: latin-1 -*-
 import serial
 import time
+channel = 'COM4'
 
-arduino = serial.Serial('COM3', 9600, timeout = 1) #Creates arduino object
-time.sleep(3)
+arduino = serial.Serial(channel, 9600, timeout = 1) #Creates arduino object
+#time.sleep(3)
 
 while True:
     command = input("Servo position: ")
