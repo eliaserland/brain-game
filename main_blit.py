@@ -103,7 +103,7 @@ class Graph:
 		self.data = np.zeros((BoardShim.get_num_rows(self.board_id), self.num_points))
 		self.time = list(reversed(-np.arange(0, self.num_points)/self.sampling_rate))
 		
-		# Limit no. of channels in testing with synthetic data
+		# Limit no. of channels if testing with synthetic data
 		if self.board_id == BoardIds.SYNTHETIC_BOARD:
 			self.exg_channels = [1, 2, 3, 4, 5, 6, 7, 8]
 		
@@ -184,7 +184,12 @@ class Graph:
 										FilterTypes.BUTTERWORTH.value, 0)
 
 		# Data processing:
-		freq = DataFilter.perform_fft(data[0, :smallest_power(data.shape[1])], WindowFunctions.HANNING)
+		for i, channel in enumerate(self.exg_channels):
+			# Fast Fourier Transform:
+			# FFT-alg can only accept an array with lenght equal to a power of 2.
+			length = data.shape[1]
+			n = smallest_power(length)
+			freq = DataFilter.perform_fft(data[channel, length-n:], WindowFunctions.HANNING)
 #		print(freq.shape)
 
 		# Merge into self.data
