@@ -8,9 +8,10 @@ import numpy as np
 #import pyqtgraph.ptime as ptime
 
 from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds, BrainFlowError
-from brainflow.data_filter import DataFilter, FilterTypes, AggOperations, WindowFunctions, DetrendOperations
+from brainflow.data_filter import DataFilter, FilterTypes, AggOperations, NoiseTypes, WindowFunctions, DetrendOperations
 
 from matplotlib import pyplot as plt
+from matplotlib.gridspec import GridSpec
 logging.getLogger('matplotlib').disabled = True
 
 programName = 'BrainGame Curiosum'
@@ -164,21 +165,31 @@ class Graph:
 	def update(self):
 		global fps, lastTime
 		# Get data from board
-		board_data = self.board_shim.get_current_board_data(self.num_points)
-		series_len = board_data.shape[1]
-		self.data[:, (self.num_points-series_len):] = board_data
+		data = self.board_shim.get_current_board_data(self.num_points)
 
-		# Data processing: Manipulate self.data 
+		# Data filtering: Manipulate the data array 
 		for i, channel in enumerate(self.exg_channels):
-			DataFilter.detrend(self.data[channel], DetrendOperations.CONSTANT.value)
-			DataFilter.perform_bandpass(self.data[channel], self.sampling_rate, 51.0, 100.0, 2,
+			# Notch filter, remove 50Hz AC interference.
+			DataFilter.remove_environmental_noise(data[channel], self.sampling_rate, NoiseTypes.FIFTY)
+
+
+			DataFilter.detrend(data[channel], DetrendOperations.CONSTANT.value)
+			DataFilter.perform_bandpass(data[channel], self.sampling_rate, 51.0, 100.0, 2,
 									FilterTypes.BUTTERWORTH.value, 0)
-			DataFilter.perform_bandpass(self.data[channel], self.sampling_rate, 51.0, 100.0, 2,
+			DataFilter.perform_bandpass(data[channel], self.sampling_rate, 51.0, 100.0, 2,
 										FilterTypes.BUTTERWORTH.value, 0)
-			DataFilter.perform_bandstop(self.data[channel], self.sampling_rate, 50.0, 4.0, 2,
+			DataFilter.perform_bandstop(data[channel], self.sampling_rate, 50.0, 4.0, 2,
 										FilterTypes.BUTTERWORTH.value, 0)
-			DataFilter.perform_bandstop(self.data[channel], self.sampling_rate, 60.0, 4.0, 2,
+			DataFilter.perform_bandstop(data[channel], self.sampling_rate, 60.0, 4.0, 2,
 										FilterTypes.BUTTERWORTH.value, 0)
+
+		# Data processing:
+		freq = DataFilter.perform_fft(data[0, :smallest_power(data.shape[1])], WindowFunctions.HANNING)
+#		print(freq.shape)
+
+		# Merge into self.data
+		series_len = data.shape[1]
+		self.data[:, (self.num_points-series_len):] = data
 
 		# Update the artists
 		for i, channel in enumerate(self.exg_channels):
@@ -200,6 +211,9 @@ class Graph:
 			fps = fps * (1-s) + (1.0/dt) * s
 		print(f" {fps:0.2f} fps", end='\r')
 
+def smallest_power(x):
+	"Return the smallest power of 2, smaller than or equal to x."
+	return 0 if x == 0 or x == 1 else  1<<(x.bit_length()-1)
 
 def main():
 	# Set logging level.
