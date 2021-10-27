@@ -121,6 +121,7 @@ class Graph:
 			self.num_players = 1 # Single-player
 		else:
 			self.num_players = 2 # Multi-player.
+			self.player_channels = [1, 2] # Channel idx for each player
 
 		# Allocate deques for each player metric.
 		self.metrics = list()
@@ -152,6 +153,7 @@ class Graph:
 		while self.running:
 			# Gather data and update everything.
 			self.update()
+
 			# Limit update frequency if needed.
 			lastTime = now
 			now = time.time()
@@ -163,6 +165,10 @@ class Graph:
 		"""Initialize the time series and associated plots."""
 		# Window limits of time series plot.
 		ylim = 200 * 1.1
+		fsize = 8
+
+		# Set color cycle.
+		colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
 		
 		# Create a figure.
 		fig = plt.figure(constrained_layout=True)
@@ -172,7 +178,9 @@ class Graph:
 			num_channels = len(self.eeg_channels) 
 			# Set gridspec for custom subplot layout.
 			gs = GridSpec(num_channels, 2, figure=fig)
-			# Create axes for the left column of time series plot.
+
+			# Create axes for the figure.
+			# Left column
 			axes = []
 			for i in range(num_channels):
 				ax = fig.add_subplot(gs[i, 0])
@@ -186,33 +194,72 @@ class Graph:
 			axes.append(ax)
 			ax = fig.add_subplot(gs[int(num_channels*3/4):, 1])
 			axes.append(ax)
-		
-		else: #
+
+			# Add all lines
+			ln = list()
+			for i, ax in enumerate(axes):
+				if i < len(num_channels): # Time series graphs.
+					(ln_tmp,) = ax.plot(self.time, self.data[self.eeg_channels[i]], 
+					                    animated=True, linewidth=0.8, color=colors[i%10])
+					ln.append(ln_tmp)
+					ax.set_ylim(-ylim, ylim)
+					ax.set_xlim(np.min(self.time)*1.001, np.max(self.time))
+					ax.set_ylabel("Pot (uV)", fontsize=fsize)
+					if i == len(self.eeg_channels)-1:
+						ax.set_xlabel("Time (s)", fontsize=fsize)
+
+				elif (i == num_channels+1): # FFT-graph.
+					pass
+					#(ln_tmp,) = ax.plot([0], self.metric, animated=True, linewidth=0.8, color=colors[i%10]) # TODO: CHANGE THIS HERE 
+				elif (i == num_channels+2): # Avg band power.
+					pass
+				elif (i == num_channels+3): # Focus metric.
+					(ln_tmp,) = ax.plot([0], self.metric, animated=True, linewidth=0.8, color=colors[i%10])
+					ln.append(ln_tmp)
+					ax.set_ylim(-0.01, 1.01)
+					ax.set_xlim(-10, 0)
+					ax.set_ylabel('Metric value', fontsize=fsize)
+					ax.set_xlabel("Time (s)", fontsize=fsize)
+				else: # Other
+					pass
+
+				ax.tick_params(axis='x', labelsize=fsize)
+				ax.tick_params(axis='y', labelsize=fsize)
 
 
-		# Set sequential colormap
-		#cmap = 'viridis'
-		#colors = getattr(plt.cm, cmap)(np.linspace(0,1,len(axes)))
-		colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+		else: # Multi-player
+			num_rows = 4, num_cols = 2
+			gs = GridSpec(num_rows, num_cols, figure=fig)
+			axes = []
+			for i in range(num_rows):
+				for j in range(num_cols):
+					ax = fig.add_subplot(gs[i, j])
+					axes.append(ax)
 
-		# Add all lines 
-		ln = list()
-		for i, ax in enumerate(axes):
-			if i < len(self.eeg_channels):
-				(ln_tmp,) = ax.plot(self.time, self.data[self.eeg_channels[i]], animated=True, linewidth=0.8, color=colors[i%10])
-				ln.append(ln_tmp)
-				ax.set_ylim(-ylim, ylim)
-				ax.set_xlim(np.min(self.time)*1.001, np.max(self.time))
-				ax.tick_params(axis='x', labelsize=6)
-				ax.tick_params(axis='y', labelsize=6)
-				ax.set_ylabel("Pot (uV)", fontsize=6)
-				if i == len(self.eeg_channels)-1:
-					ax.set_xlabel("Time (s)", fontsize=6)
-			else:
-				(ln_tmp,) = ax.plot([0], self.metric, animated=True, linewidth=0.8, color=colors[i%10])
-				ln.append(ln_tmp)
-				ax.set_ylim(-0.01, 1.01)
-				ax.set_xlim(-10, 0)
+			# Add all lines
+			ln = list()
+			for i, ax in enumerate(axes):
+				if i < 2: # Time series graph.
+					(ln_tmp,) = ax.plot(self.time, self.data[self.eeg_channels[i]], animated=True, linewidth=0.8, color=colors[i%10])
+					ln.append(ln_tmp)
+					ax.set_ylim(-ylim, ylim)
+					ax.set_xlim(np.min(self.time)*1.001, np.max(self.time))
+					ax.set_ylabel("Pot (uV)", fontsize=fsize)
+					if i == len(self.eeg_channels)-1:
+						ax.set_xlabel("Time (s)", fontsize=fsize)
+				elif i < 4: # FFT-graph
+					pass
+				elif i < 6: # Avg band power.
+					pass
+				else: # Focus metric.
+					(ln_tmp,) = ax.plot([0], self.metric, animated=True, linewidth=0.8, color=colors[i%10])
+					ln.append(ln_tmp)
+					ax.set_ylim(-0.01, 1.01)
+					ax.set_xlim(-10, 0)
+
+				ax.tick_params(axis='x', labelsize=fsize)
+				ax.tick_params(axis='y', labelsize=fsize)
+
 
 		# Add an FPS counter
 		fr_number = axes[0].set_title("0")
@@ -264,21 +311,10 @@ class Graph:
 		data = self.board_shim.get_current_board_data(self.num_points)
 
 		# Data filtering: Manipulate the data array 
-		for i, channel in enumerate(self.eeg_channels):
-			# Notch filter, remove 50Hz AC interference.
-			DataFilter.remove_environmental_noise(data[channel], self.sampling_rate, NoiseTypes.FIFTY)
-
-			DataFilter.detrend(data[channel], DetrendOperations.CONSTANT.value)
-			DataFilter.perform_bandpass(data[channel], self.sampling_rate, 51.0, 100.0, 2,
-									FilterTypes.BUTTERWORTH.value, 0)
-			#DataFilter.perform_bandpass(data[channel], self.sampling_rate, 51.0, 100.0, 2,
-			#							FilterTypes.BUTTERWORTH.value, 0)
-			#DataFilter.perform_bandstop(data[channel], self.sampling_rate, 50.0, 4.0, 2,
-			#							FilterTypes.BUTTERWORTH.value, 0)
-			#DataFilter.perform_bandstop(data[channel], self.sampling_rate, 60.0, 4.0, 2,
-			#							FilterTypes.BUTTERWORTH.value, 0)
+		self.filter_data()
 
 		# Data processing:
+		# PERFORM FAST FOURIER TRANSFOR ON DATA
 		#for i, channel in enumerate(self.eeg_channels):
 		#	# Fast Fourier Transform:
 		#	# FFT-alg can only accept an array with lenght equal to a power of 2.
@@ -288,21 +324,24 @@ class Graph:
 #		print(freq.shape)
 
 		# Get metric prediction from the ML model
-		bands = DataFilter.get_avg_band_powers(data, self.eeg_channels, self.sampling_rate, True)
-		feature_vector = np.concatenate((bands[0], bands[1]))
-		metric = self.models[0].predict(feature_vector)
+		self.get_metric(data)
 
-		# Get time and append to the appropriate lists
-		metric_time = data[self.timestamp_channel, -1]
-		self.metric.append(metric)
-		self.metric_time.append(metric_time)
+		## Get metric prediction from the ML model
+		#bands = DataFilter.get_avg_band_powers(data, self.eeg_channels, self.sampling_rate, True)
+		#feature_vector = np.concatenate((bands[0], bands[1]))
+		#metric = self.models[0].predict(feature_vector)
+
+		## Get time and append to the appropriate lists
+		#metric_time = data[self.timestamp_channel, -1]
+		#self.metric.append(metric)
+		#self.metric_time.append(metric_time)
 
 		# Merge into self.data
 		series_len = data.shape[1]
 		self.data[:, (self.num_points-series_len):] = data
 
 		
-		if not self.no_gui:
+		if not self.no_gui: # TODO: REDO THIS DEP ON GAME MODE
 			# Update the artists:
 			for i, channel in enumerate(self.eeg_channels):
 				self.ln[i].set_ydata(self.data[channel])
@@ -321,6 +360,65 @@ class Graph:
 		print(f" {fps:6.2f} fps, metric ({self.model_params[0].metric.name.lower()}): {metric:.3f}", end='\r')
 
 #	def get_metrics(self, data):
+
+	def filter_data(self, data):
+		# Only filter active channels.
+		if self.game_mode == 'pvp':
+			active_channels = [1, 2]
+		else:
+			active_channels = self.eeg_channels
+		# Filter data:
+		for i, channel in enumerate(active_channels):
+			# Notch filter, remove 50Hz AC interference.
+			DataFilter.remove_environmental_noise(data[channel], self.sampling_rate, NoiseTypes.FIFTY)
+			# Constant detrend, i.e. center data at y = 0
+			DataFilter.detrend(data[channel], DetrendOperations.CONSTANT.value)
+			# Bandpass filter
+			DataFilter.perform_bandpass(data[channel], self.sampling_rate, 51.0, 100.0, 2,
+			                            FilterTypes.BUTTERWORTH.value, 0)
+			#DataFilter.perform_bandpass(data[channel], self.sampling_rate, 51.0, 100.0, 2,
+			#                            FilterTypes.BUTTERWORTH.value, 0)
+			#DataFilter.perform_bandstop(data[channel], self.sampling_rate, 50.0, 4.0, 2,
+			#                            FilterTypes.BUTTERWORTH.value, 0)
+			#DataFilter.perform_bandstop(data[channel], self.sampling_rate, 60.0, 4.0, 2,
+			#                            FilterTypes.BUTTERWORTH.value, 0)
+
+	def get_metric(self, data):
+		self.current_metrics = []
+		self.current_metric_times = []
+		if self.game_mode == 'pvp':
+			active_channels = [1, 2]
+			for i, channel in enumerate(active_channels):
+				# Get metric estimate.
+				bands = DataFilter.get_avg_band_powers(data, list(channel), self.sampling_rate, True)
+				feature_vector = np.concatenate((bands[0], bands[1]))
+				metric = self.models[i].predict(feature_vector)
+				self.metrics[i].append(metric)
+
+				# Get time corresponding to the metric value.
+				metric_time = data[self.timestamp_channel, -1]
+				self.metric_times[i].append(metric_time)
+
+				self.current_metrics.append(metric)
+				self.current_metric_times.append(metric_time)
+
+		elif self.game_mode == 'sp':
+			# Get metric prediction from the ML model
+			bands = DataFilter.get_avg_band_powers(data, self.eeg_channels, self.sampling_rate, True)
+			feature_vector = np.concatenate((bands[0], bands[1]))
+			metric = self.models[0].predict(feature_vector)
+			self.metric.append(metric)
+
+			# Get time and append to the appropriate list
+			metric_time = data[self.timestamp_channel, -1]
+			self.metric_time.append(metric_time)
+
+			self.current_metrics.append(metric)
+			self.current_metric_times.append(metric_time)
+		else:
+			pass # THROW ERROR #TODO
+
+
 
 	def calc_fps(self):
 		"""Calculate frames per second."""
