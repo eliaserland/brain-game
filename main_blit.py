@@ -97,7 +97,9 @@ class BlitManager:
 		cv.flush_events()
 
 class Graph:
-	def __init__(self, board_shim, no_gui):
+	def __init__(self, board_shim, settings):
+		"""Initialize."""
+		# Save board parameters.
 		self.board_id = board_shim.get_board_id()
 		self.board_shim = board_shim
 		self.eeg_channels = BoardShim.get_eeg_channels(self.board_id)
@@ -105,17 +107,33 @@ class Graph:
 		self.window_size = 5
 		self.num_points = self.window_size * self.sampling_rate
 		self.timestamp_channel = BoardShim.get_timestamp_channel(self.board_id)
+
+		# Allocate arrays for data and time.
 		self.data = np.zeros((BoardShim.get_num_rows(self.board_id), self.num_points))
 		self.time = list(reversed(-np.arange(0, self.num_points)/self.sampling_rate))
 		
-		self.metric = deque([0], maxlen=self.num_points)
-		self.metric_time = deque([time.time()], maxlen=self.num_points)
-		self.no_gui = no_gui
-		#print(BoardShim.get_board_descr(self.board_id))
+		# Game settings.
+		self.no_gui = settings['no_gui']
+		self.game_mode = settings['game_mode']
+
+		# Set number of players.
+		if self.game_mode == 'sp':
+			self.num_players = 1 # Single-player
+		else:
+			self.num_players = 2 # Multi-player.
+
+		# Allocate deques for each player metric.
+		self.metrics = list()
+		self.metric_times = list()
+		for i in range(self.num_players):
+			m = deque([0], maxlen=self.num_points)
+			t = deque([time.time()], maxlen=self.num_points)
+			self.metrics.append(m)
+			self.metric_times.append(t)
 
 		# Limit no. of channels if testing with synthetic data
 		if self.board_id == BoardIds.SYNTHETIC_BOARD:
-			self.eeg_channels = [1, 2, 3, 4, 5] #, 6, 7, 8]
+			self.eeg_channels = [1, 2, 3, 4, 5, 6, 7, 8]
 		
 		# Initialize plots
 		if not self.no_gui:
@@ -123,11 +141,10 @@ class Graph:
 		else:
 			time.sleep(1) # ONLY TEMPORARY
 
-		# Initialize ML model
-		self._init_ml_model()
+		# Initialize ML models
+		self._create_ml_models(num_players=self.num_players)
 
 		print("----INITIALIZATION COMPLETED----")
-				
 
 		# Update plots, until program end.
 		self.running = True
@@ -135,15 +152,12 @@ class Graph:
 		while self.running:
 			# Gather data and update everything.
 			self.update()
-
-			# Limit update freq if needed ()
+			# Limit update frequency if needed.
 			lastTime = now
 			now = time.time()
 			dt = now-lastTime
 			if dt <= 1/self.sampling_rate:
 				time.sleep(1/self.sampling_rate - dt)
-
-
 
 	def _init_plot(self):
 		"""Initialize the time series and associated plots."""
@@ -153,23 +167,28 @@ class Graph:
 		# Create a figure.
 		fig = plt.figure(constrained_layout=True)
 		
-		# Set gridspec for custom subplot layout.
-		gs = GridSpec(len(self.eeg_channels), 2, figure=fig)
-		axes = []
-		# Create axes for the left column of time series plot.
-		for i in range(len(self.eeg_channels)):
-			ax = fig.add_subplot(gs[i, 0])
+		# Set up figure according to the game mode.
+		if self.game_mode == 'sp': # Single-player
+			num_channels = len(self.eeg_channels) 
+			# Set gridspec for custom subplot layout.
+			gs = GridSpec(num_channels, 2, figure=fig)
+			# Create axes for the left column of time series plot.
+			axes = []
+			for i in range(num_channels):
+				ax = fig.add_subplot(gs[i, 0])
+				axes.append(ax)	
+			# Right column
+			ax = fig.add_subplot(gs[:int(num_channels/4), 1])
 			axes.append(ax)
+			ax = fig.add_subplot(gs[int(num_channels/4):int(num_channels/2), 1])
+			axes.append(ax)
+			ax = fig.add_subplot(gs[int(num_channels/2):int(num_channels*3/4), 1])
+			axes.append(ax)
+			ax = fig.add_subplot(gs[int(num_channels*3/4):, 1])
+			axes.append(ax)
+		
+		else: #
 
-		# Right column
-		ax = fig.add_subplot(gs[:len(self.eeg_channels)//2, 1])
-		axes.append(ax)
-		ax = fig.add_subplot(gs[len(self.eeg_channels)//2:, 1])
-		axes.append(ax)
-
-
-		#fig, axes = plt.subplots(len(self.eeg_channels), 1, figsize=(6, 6), sharex=True)
-		#axes = axes.flatten()
 
 		# Set sequential colormap
 		#cmap = 'viridis'
@@ -210,26 +229,37 @@ class Graph:
 		# Set trigger when when window is closed.
 		fig.canvas.mpl_connect('close_event', self._on_close)
 		fig.canvas.manager.set_window_title(programName)
-
-
-	def _init_ml_model(self):
-		"""Initialize the BrainFlow Machine Learning model."""
-		# Get model parameters.
-		self.model_params = BrainFlowModelParams(BrainFlowMetrics.RELAXATION, BrainFlowClassifiers.REGRESSION)
-		# Create the model.
-		self.model = MLModel(self.model_params)
-		# Set log level and prepare the classifier.
-		self.model.enable_ml_logger()
-		self.model.prepare()
-
-
+	
 	def _on_close(self, event):
 		"""Tasks to perform on app closing event."""
 		self.running = False
-		self.model.release()
+
+	def _create_ml_models(self, num_players=2):
+		"""Create ML models for each player."""
+		self.models = list()
+		self.model_params = list()
+		for i in range(num_players):
+			m, p = self._init_ml_model()
+			self.models.append(m)
+			self.model_params.append(p)
+
+	def _init_ml_model(self):
+		"""Initialize a brainflow machine learning model."""
+		# Set model parameters.
+		model_params = BrainFlowModelParams(BrainFlowMetrics.RELAXATION, BrainFlowClassifiers.REGRESSION)
+		# Create the model.
+		model = MLModel(model_params)
+		# Set log level and prepare the classifier.
+		model.enable_ml_logger()
+		model.prepare()
+		# Return the classifer with its parameters.
+		return model, model_params
+
+	def remove_ml_models(self):
+		for model in self.models:
+			model.release()
 
 	def update(self):
-		global fps, lastTime
 		# Get data from board
 		data = self.board_shim.get_current_board_data(self.num_points)
 
@@ -260,7 +290,7 @@ class Graph:
 		# Get metric prediction from the ML model
 		bands = DataFilter.get_avg_band_powers(data, self.eeg_channels, self.sampling_rate, True)
 		feature_vector = np.concatenate((bands[0], bands[1]))
-		metric = self.model.predict(feature_vector)
+		metric = self.models[0].predict(feature_vector)
 
 		# Get time and append to the appropriate lists
 		metric_time = data[self.timestamp_channel, -1]
@@ -285,15 +315,32 @@ class Graph:
 			self.bm.update()
 
 		# Calculate frames per second
+		self.calc_fps()
+
+		# Print info to terminal
+		print(f" {fps:6.2f} fps, metric ({self.model_params[0].metric.name.lower()}): {metric:.3f}", end='\r')
+
+#	def get_metrics(self, data):
+
+	def calc_fps(self):
+		"""Calculate frames per second."""
+		global fps, lastTime
 		now = time.time()
 		dt = now - lastTime
 		lastTime = now
 		if fps == -1:
 			fps = 1.0/dt
-		else:
+		else: 
 			s = np.clip(dt*3., 0, 1)
 			fps = fps * (1-s) + (1.0/dt) * s
-		print(f" {fps:6.2f} fps, metric ({self.model_params.metric.name.lower()}): {metric:.3f}", end='\r')
+	
+	def print_info(self):
+		"""Print information to """
+		global fps
+		print(f"{fps:6.2f} fps, metric ({self.model_params[0].metric.name.lower()}):", end='')
+		for i in self.num_players:
+			print(f'player{i}={metric:.3f}')
+
 
 def smallest_power(x):
 	"""Return the smallest power of 2, smaller than or equal to x."""
@@ -307,6 +354,7 @@ def main():
 	# Parse command line arguments. Use docs to check which parameters are 
 	# required for specific board, e.g. for Cyton - set serial port.
 	parser = argparse.ArgumentParser()
+	# Board options:
 	parser.add_argument('--timeout',     type=int, required=False, default=0, help='timeout for device discovery or connection',)
 	parser.add_argument('--ip-port',     type=int, required=False, default=0, help='ip port',)
 	parser.add_argument('--ip-protocol', type=int, required=False, default=0, help='ip protocol, check IpProtocolType enum')
@@ -317,8 +365,10 @@ def main():
 	parser.add_argument('--streamer-params', type=str, required=False, default='', help='streamer params')
 	parser.add_argument('--serial-number',   type=str, required=False, default='', help='serial number')
 	parser.add_argument('--file',            type=str, required=False, default='', help='file')
-	parser.add_argument('--board-id',        type=int, required=False, default=BoardIds.SYNTHETIC_BOARD, help='board id, check docs to get a list of supported boards')
-	parser.add_argument('--no-gui', type=bool, required=False, default=False, help='run program without GUI')
+	parser.add_argument('--board-id',        type=int, required=False, default=BoardIds.SYNTHETIC_BOARD, help='Board id, check docs to get a list of supported boards.')
+	# Game options:
+	parser.add_argument('--no-gui', type=bool, required=False, default=False, help='Run program without GUI.')
+	parser.add_argument('--game-mode', type=str, required=False, default='pvp', choices=['pvp', 'sp'], help="Game modes: single- or multiplayer.")
 	args = parser.parse_args()
 
 	# Set parsed parameters in BrainFlowInputParams structure.
@@ -332,32 +382,44 @@ def main():
 	params.ip_protocol = args.ip_protocol
 	params.timeout = args.timeout
 	params.file = args.file
-	no_gui = args.no_gui
+	
+	# Game settings.
+	settings = {
+		'no_gui': args.no_gui,
+		'game_mode': args.game_mode
+	}
 
+	g = None
 	try:
-		# Start session.
+		# Initialize board and prepare session.
 		board_shim = BoardShim(args.board_id, params)
 		board_shim.prepare_session()
 
 		# Set board to "differential mode." See: https://docs.openbci.com/Cyton/CytonSDK/#channel-setting-commands
 		# x (CHANNEL, POWER_DOWN, GAIN_SET, INPUT_TYPE_SET, BIAS_SET, SRB2_SET, SRB1_SET) X
 		if board_shim.board_id == BoardIds.CYTON_BOARD:
-			ch_settings = ["x1060100X", "x2060100X", "x3161000X", "x4161000X",
-			               "x5161000X", "x6161000X", "x7161000X", "x8161000X"]
-			for s in ch_settings:
-				board_shim.config_board(s)
-		
+			if settings['game_mode'] == 'pvp':
+				# channel 1,2 "differential mode", channel 3-8 off.
+				ch_settings = ["x1060100X", "x2060100X", "x3161000X", "x4161000X",
+				               "x5161000X", "x6161000X", "x7161000X", "x8161000X"]
+				board_shim.config_board(''.join(ch_settings))
+
+		# Start session.
 		board_shim.start_stream(450000, args.streamer_params)
 		
 		# Start plotting.
-		g = Graph(board_shim, no_gui)
+		g = Graph(board_shim, settings)
 		
 	except BaseException as e:
 		# Error handling.
 		logging.warning('Exception', exc_info=True)
+		if g is not None:
+			g.remove_ml_models()
 	
 	finally:
 		# End session.
+		if g is not None:
+			g.remove_ml_models()
 		logging.info('End')
 		if board_shim.is_prepared():
 			logging.info('Releasing session')
