@@ -83,7 +83,7 @@ class BlitManager:
 		"""Update the screen with animated artists."""
 		cv = self.canvas
 		fig = cv.figure
-		# paranoia in case we missed the draw event,
+		# paranoia in case we missed the draw event
 		if self._bg is None:
 			self.on_draw(None)
 		else:
@@ -97,7 +97,7 @@ class BlitManager:
 		cv.flush_events()
 
 class Graph:
-	def __init__(self, board_shim):
+	def __init__(self, board_shim, no_gui):
 		self.board_id = board_shim.get_board_id()
 		self.board_shim = board_shim
 		self.eeg_channels = BoardShim.get_eeg_channels(self.board_id)
@@ -110,25 +110,42 @@ class Graph:
 		
 		self.metric = deque([0], maxlen=self.num_points)
 		self.metric_time = deque([time.time()], maxlen=self.num_points)
-		
+		self.no_gui = no_gui
+		#print(BoardShim.get_board_descr(self.board_id))
+
 		# Limit no. of channels if testing with synthetic data
 		if self.board_id == BoardIds.SYNTHETIC_BOARD:
 			self.eeg_channels = [1, 2, 3, 4, 5] #, 6, 7, 8]
 		
 		# Initialize plots
-		self._init_timeseries()
+		if not self.no_gui:
+			self._init_plot()
+		else:
+			time.sleep(1) # ONLY TEMPORARY
 
 		# Initialize ML model
 		self._init_ml_model()
 
 		print("----INITIALIZATION COMPLETED----")
+				
 
 		# Update plots, until program end.
 		self.running = True
+		now = time.time()
 		while self.running:
+			# Gather data and update everything.
 			self.update()
 
-	def _init_timeseries(self):
+			# Limit update freq if needed ()
+			lastTime = now
+			now = time.time()
+			dt = now-lastTime
+			if dt <= 1/self.sampling_rate:
+				time.sleep(1/self.sampling_rate - dt)
+
+
+
+	def _init_plot(self):
 		"""Initialize the time series and associated plots."""
 		# Window limits of time series plot.
 		ylim = 200 * 1.1
@@ -232,12 +249,12 @@ class Graph:
 			#							FilterTypes.BUTTERWORTH.value, 0)
 
 		# Data processing:
-		for i, channel in enumerate(self.eeg_channels):
-			# Fast Fourier Transform:
-			# FFT-alg can only accept an array with lenght equal to a power of 2.
-			length = data.shape[1]
-			n = smallest_power(length)
-			freq = DataFilter.perform_fft(data[channel, length-n:], WindowFunctions.HANNING)
+		#for i, channel in enumerate(self.eeg_channels):
+		#	# Fast Fourier Transform:
+		#	# FFT-alg can only accept an array with lenght equal to a power of 2.
+		#	length = data.shape[1]
+		#	n = smallest_power(length)
+		#	freq = DataFilter.perform_fft(data[channel, length-n:], WindowFunctions.HANNING)
 #		print(freq.shape)
 
 		# Get metric prediction from the ML model
@@ -254,18 +271,18 @@ class Graph:
 		series_len = data.shape[1]
 		self.data[:, (self.num_points-series_len):] = data
 
-		# Update the artists:
-		for i, channel in enumerate(self.eeg_channels):
-			self.ln[i].set_ydata(self.data[channel])
-
-		rel_time = np.array(self.metric_time)-metric_time
-		self.ln[-1].set_ydata(self.metric)
-		self.ln[-1].set_xdata(rel_time)
-
-		self.fr_number.set_text(f"{fps:0.2f} fps")
 		
-		# Tell the blitting manager to do its thing
-		self.bm.update()
+		if not self.no_gui:
+			# Update the artists:
+			for i, channel in enumerate(self.eeg_channels):
+				self.ln[i].set_ydata(self.data[channel])
+			rel_time = np.array(self.metric_time)-metric_time
+			self.ln[-1].set_ydata(self.metric)
+			self.ln[-1].set_xdata(rel_time)
+			self.fr_number.set_text(f"{fps:0.2f} fps")
+		
+			# Tell the blitting manager to do its thing
+			self.bm.update()
 
 		# Calculate frames per second
 		now = time.time()
@@ -276,7 +293,7 @@ class Graph:
 		else:
 			s = np.clip(dt*3., 0, 1)
 			fps = fps * (1-s) + (1.0/dt) * s
-		print(f" {fps:0.2f} fps", end='\r')
+		print(f" {fps:6.2f} fps, metric ({self.model_params.metric.name.lower()}): {metric:.3f}", end='\r')
 
 def smallest_power(x):
 	"""Return the smallest power of 2, smaller than or equal to x."""
@@ -301,6 +318,7 @@ def main():
 	parser.add_argument('--serial-number',   type=str, required=False, default='', help='serial number')
 	parser.add_argument('--file',            type=str, required=False, default='', help='file')
 	parser.add_argument('--board-id',        type=int, required=False, default=BoardIds.SYNTHETIC_BOARD, help='board id, check docs to get a list of supported boards')
+	parser.add_argument('--no-gui', type=bool, required=False, default=False, help='run program without GUI')
 	args = parser.parse_args()
 
 	# Set parsed parameters in BrainFlowInputParams structure.
@@ -314,15 +332,25 @@ def main():
 	params.ip_protocol = args.ip_protocol
 	params.timeout = args.timeout
 	params.file = args.file
+	no_gui = args.no_gui
 
 	try:
 		# Start session.
 		board_shim = BoardShim(args.board_id, params)
 		board_shim.prepare_session()
+
+		# Set board to "differential mode." See: https://docs.openbci.com/Cyton/CytonSDK/#channel-setting-commands
+		# x (CHANNEL, POWER_DOWN, GAIN_SET, INPUT_TYPE_SET, BIAS_SET, SRB2_SET, SRB1_SET) X
+		if board_shim.board_id == BoardIds.CYTON_BOARD:
+			ch_settings = ["x1060100X", "x2060100X", "x3161000X", "x4161000X",
+			               "x5161000X", "x6161000X", "x7161000X", "x8161000X"]
+			for s in ch_settings:
+				board_shim.config_board(s)
+		
 		board_shim.start_stream(450000, args.streamer_params)
 		
 		# Start plotting.
-		g = Graph(board_shim)
+		g = Graph(board_shim, no_gui)
 		
 	except BaseException as e:
 		# Error handling.
