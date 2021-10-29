@@ -3,6 +3,7 @@ import time
 import logging
 import copy
 import pickle
+from matplotlib import artist
 import numpy as np
 
 from collections import deque
@@ -120,8 +121,6 @@ class Graph:
 		self.num_players = settings['num_players']
 		self.active_channels = settings['active_channels']
 
-		print(self.active_channels)
-
 		# Allocate deques for each player metric.
 		self.metrics = list()
 		self.metric_times = list()
@@ -171,7 +170,13 @@ class Graph:
 		colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
 		
 		# Create a figure.
-		fig = plt.figure(constrained_layout=True, num='Test')
+		fig = plt.figure(constrained_layout=True, num=programName)
+
+		self.ln_timeseries = list()
+		self.ln_ftt = list()
+		self.ln_band = list()
+		self.ln_focus = list()
+		self.barplots = list()
 		
 		# Set up figure according to the game mode.
 		if self.game_mode == 'analysis':
@@ -196,12 +201,11 @@ class Graph:
 			axes.append(ax)
 
 			# Add all lines
-			ln = list()
 			for i, ax in enumerate(axes):
 				if i < num_channels: # Time series graphs.
 					(ln_tmp,) = ax.plot(self.time, self.data[self.eeg_channels[i]], 
 					                    animated=True, linewidth=lsize, color=colors[i%10])
-					ln.append(ln_tmp)
+					self.ln_timeseries.append(ln_tmp)
 					ax.set_ylim(-ylim, ylim)
 					ax.set_xlim(np.min(self.time)*1.001, np.max(self.time))
 					ax.set_ylabel("Pot (uV)", fontsize=fsize)
@@ -210,15 +214,18 @@ class Graph:
 				elif i == num_channels: # FFT-graph.
 					(ln_tmp,) = ax.plot(self.time, self.data[self.eeg_channels[0]], 
 					                    animated=True, linewidth=lsize, color=colors[i%10])
-					ln.append(ln_tmp) # only temp
+					self.ln_ftt.append(ln_tmp) # only temp
 					#(ln_tmp,) = ax.plot([0], self.metric, animated=True, linewidth=0.8, color=colors[i%10]) # TODO: CHANGE THIS HERE 
 				elif i == num_channels+1: # Avg band power.
-					(ln_tmp,) = ax.plot(self.time, self.data[self.eeg_channels[0]], 
-					                    animated=True, linewidth=lsize, color=colors[i%10])
-					ln.append(ln_tmp) # only temp
+					barcontainer = ax.bar(list(range(5)), np.ones(5), animated=True)
+					for b in barcontainer:
+						self.ln_band.append(b)
+					self.barplots.append(barcontainer)
+					ax.set_yscale('log')
+					ax.set_ylim(1, 100)
 				elif i == num_channels+2: # Focus metric.
 					(ln_tmp,) = ax.plot([0], self.metrics[0], animated=True, linewidth=lsize, color=colors[i%10])
-					ln.append(ln_tmp)
+					self.ln_focus.append(ln_tmp)
 					ax.set_ylim(-0.01, 1.01)
 					ax.set_xlim(-10, 0)
 					ax.set_ylabel('Metric value', fontsize=fsize)
@@ -239,12 +246,11 @@ class Graph:
 					axes.append(ax)
 
 			# Add all lines
-			ln = list()
 			player_names = ['Player 1', 'Player 2', 'Player 3', 'Player 4']
 			for i, ax in enumerate(axes):
 				if i < num_cols: # Time series graph.
 					(ln_tmp,) = ax.plot(self.time, self.data[self.active_channels[i]], animated=True, linewidth=lsize, color=colors[i//self.num_players])
-					ln.append(ln_tmp)
+					self.ln_timeseries.append(ln_tmp)
 					ax.set_ylim(-ylim, ylim)
 					ax.set_xlim(np.min(self.time)*1.001, np.max(self.time))
 					ax.set_ylabel("Pot (uV)", fontsize=fsize)
@@ -252,13 +258,17 @@ class Graph:
 					ax.set_title(player_names[i])
 				elif i < 2*num_cols: # FFT-graph
 					(ln_tmp,) = ax.plot(self.time, self.data[self.active_channels[0]], animated=True, linewidth=lsize, color=colors[i//self.num_players])
-					ln.append(ln_tmp) # only temp
+					self.ln_ftt.append(ln_tmp) # only temp
 				elif i < 3*num_cols: # Avg band power.
-					(ln_tmp,) = ax.plot(self.time, self.data[self.active_channels[0]], animated=True, linewidth=lsize, color=colors[i//self.num_players])
-					ln.append(ln_tmp) # only temp
+					barcontainer = ax.bar(list(range(5)), np.ones(5), animated=True)
+					for b in barcontainer:
+						self.ln_band.append(b)
+					self.barplots.append(barcontainer)
+					ax.set_yscale('log')
+					ax.set_ylim(10**-5, 10*2)
 				else: # Focus metric.
 					(ln_tmp,) = ax.plot([0], self.metrics[i%num_cols], animated=True, linewidth=lsize, color=colors[i//self.num_players])
-					ln.append(ln_tmp)
+					self.ln_focus.append(ln_tmp)
 					ax.set_ylim(-0.01, 1.01)
 					ax.set_xlim(-10, 0)
 					ax.set_ylabel('Metric value', fontsize=fsize)
@@ -269,15 +279,18 @@ class Graph:
 
 			self.num_rows = num_rows
 			self.num_cols = num_cols
-
+		else:
+			raise ValueError(f"Invalid option {self.game_mode}")
+		
+		# Save axis.
+		self.axes = axes
 
 		# Add an FPS counter
-		fr_number = plt.suptitle("0")
+		self.fr_number = plt.suptitle("0")
 
 		# Create the blitting manager, save all artists
-		self.bm = BlitManager(fig.canvas, ln + [fr_number])
-		self.ln = ln
-		self.fr_number = fr_number
+		artists = self.ln_timeseries+self.ln_ftt+self.ln_band+self.ln_focus+[self.fr_number]
+		self.bm = BlitManager(fig.canvas, artists)
 
 		# Make sure the window is on the screen and drawn
 		plt.show(block=False)
@@ -290,15 +303,6 @@ class Graph:
 	def _on_close(self, event):
 		"""Tasks to perform on app closing event."""
 		self.running = False
-
-#	def _create_ml_models(self, num_players=2):
-#		"""Create ML models for each player."""
-#		self.models = list()
-#		self.model_params = list()
-#		for i in range(num_players):
-#			m, p = self._init_ml_model()
-#			self.models.append(m)
-#			self.model_params.append(p)
 
 	def _init_ml_model(self):
 		"""Initialize a brainflow machine learning model."""
@@ -320,7 +324,7 @@ class Graph:
 		# Get data from board
 		data = self.board_shim.get_current_board_data(self.num_points)
 
-		# Data filtering: Manipulate the data array 
+		# Data filtering.
 		self.filter_data(data)
 
 		# Data processing:
@@ -333,19 +337,12 @@ class Graph:
 		#	freq = DataFilter.perform_fft(data[channel, length-n:], WindowFunctions.HANNING)
 #		print(freq.shape)
 
+		#self.get_fft(data)
+
+		self.get_band_power(data)
+
 		# Get metric prediction from the ML model
 		self.get_metric(data)
-
-		## Get metric prediction from the ML model
-		#bands = DataFilter.get_avg_band_powers(data, self.eeg_channels, self.sampling_rate, True)
-		#feature_vector = np.concatenate((bands[0], bands[1]))
-		#metric = self.models[0].predict(feature_vector)
-
-		## Get time and append to the appropriate lists
-		#metric_time = data[self.timestamp_channel, -1]
-		#self.metric.append(metric)
-		#self.metric_time.append(metric_time)
-
 
 		# Merge into self.data
 		series_len = data.shape[1]
@@ -366,42 +363,34 @@ class Graph:
 		self.print_info()
 
 	def update_artists(self):
-		"""Update data in the graphs."""
+		"""Update all artists in the graph."""
 		global fps
-		# Update the artists:
-		if self.game_mode == 'game':
-			for i, l in enumerate(self.ln):
-				if i < self.num_players: # Time series graphs
-					l.set_ydata(self.data[self.active_channels[i]])
-				elif i < 2*self.num_players: # FFT graphs
-					pass
-				elif i < 3*self.num_players: # Avg band power
-					pass
-				else: # Focus metric
-					relative_time = np.array(self.metric_times[i%self.num_players])-self.metric_times[i%self.num_players][-1]
-					l.set_ydata(self.metrics[i%self.num_players])
-					l.set_xdata(relative_time)
-		elif self.game_mode == 'analysis':
-			num_channels = len(self.eeg_channels)
-			# Left column: time series 
-			for i, channel in enumerate(self.eeg_channels):
-				self.ln[i].set_ydata(self.data[channel])
-			# Right column:
-			# num_channels FFT
-			# num_channels+1 Avg band power
-			# Focus metric
-			relative_time = np.array(self.metric_times[0])-self.metric_times[0][-1]
-			self.ln[num_channels+2].set_ydata(self.metrics[0])
-			self.ln[num_channels+2].set_xdata(relative_time)
+		# Time series plots
+		for i, ln in enumerate(self.ln_timeseries):
+			ln.set_ydata(self.data[self.active_channels[i]])
+		# FFT
+		for i, ln in enumerate(self.ln_ftt):
+			pass
+		# Average band power
+
+		for i, barcontainer in enumerate(self.barplots):
+			for j, b in enumerate(barcontainer):
+				b.set_height(self.avg_band_power[i][j])
+		# Focus metric
+		for i, ln in enumerate(self.ln_focus):
+			relative_time = np.array(self.metric_times[i])-self.metric_times[i][-1]
+			ln.set_ydata(self.metrics[i])
+			ln.set_xdata(relative_time)
+		# FPS counter
 		self.fr_number.set_text(f"{fps:0.2f} fps")
 
 	def filter_data(self, data):
 		# Only filter active channels.
 		for i, channel in enumerate(self.active_channels):
-			# Notch filter, remove 50Hz AC interference.
-			DataFilter.remove_environmental_noise(data[channel], self.sampling_rate, NoiseTypes.FIFTY)
 			# Constant detrend, i.e. center data at y = 0
 			DataFilter.detrend(data[channel], DetrendOperations.CONSTANT.value)
+			# Notch filter, remove 50Hz AC interference.
+			DataFilter.remove_environmental_noise(data[channel], self.sampling_rate, NoiseTypes.FIFTY)
 			# Bandpass filter
 			DataFilter.perform_bandpass(data[channel], self.sampling_rate, 51.0, 100.0, 2,
 			                            FilterTypes.BUTTERWORTH.value, 0)
@@ -411,6 +400,23 @@ class Graph:
 			#                            FilterTypes.BUTTERWORTH.value, 0)
 			#DataFilter.perform_bandstop(data[channel], self.sampling_rate, 60.0, 4.0, 2,
 			#                            FilterTypes.BUTTERWORTH.value, 0)
+
+	def get_band_power(self, data):
+		"""
+		Calculate average band power from the time series data. 5 Bands: 
+		1-4Hz, 4-8Hz, 8-13Hz, 13-30Hz, 30-50Hz.
+		"""
+		self.avg_band_power = list()
+		if self.game_mode == 'game': 
+			for i in range(self.num_players):
+				channel = self.active_channels[i]
+				avg, std = DataFilter.get_avg_band_powers(data, [channel], self.sampling_rate, True)
+				self.avg_band_power.append(avg)
+		elif self.game_mode == 'analysis':
+			avg, std = DataFilter.get_avg_band_powers(data, self.active_channels, self.sampling_rate, True)
+			self.avg_band_power.append(avg)
+		else: 
+			raise ValueError(f"Invalid option {self.game_mode}")
 
 	def get_metric(self, data):
 		self.current_metrics = list()
@@ -426,10 +432,7 @@ class Graph:
 				metric_time = data[self.timestamp_channel, -1]
 				self.metric_times[i].append(metric_time)
 
-
 				self.current_metrics.append(metric)
-				
-
 		elif self.game_mode == 'analysis':
 			# Get metric prediction from the ML model
 			bands = DataFilter.get_avg_band_powers(data, self.eeg_channels, self.sampling_rate, True)
@@ -444,8 +447,6 @@ class Graph:
 			self.current_metrics.append(metric)
 		else:
 			raise ValueError(f"Invalid option {self.game_mode}")
-
-
 
 	def calc_fps(self):
 		"""Calculate frames per second."""
