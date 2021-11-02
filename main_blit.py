@@ -1,11 +1,8 @@
 import argparse
 import time
 import logging
-import copy
-import pickle
-from matplotlib import artist
 import numpy as np
-
+import platform
 from collections import deque
 
 #import pyqtgraph as pg
@@ -17,13 +14,13 @@ from brainflow.data_filter import DataFilter, FilterTypes, AggOperations, NoiseT
 from brainflow.ml_model import BrainFlowMetrics, BrainFlowClassifiers, BrainFlowModelParams, MLModel
 
 import matplotlib
-#matplotlib.use('GTK3Agg')
+if platform.system() == 'Darwin': # Set backend for MacOS.
+	matplotlib.use('TKAgg') 
 from matplotlib import pyplot as plt
 from matplotlib.gridspec import GridSpec
 logging.getLogger('matplotlib').disabled = True
 
 programName = 'BrainGame Curiosum'
-
 fps = -1
 lastTime = time.time()
 
@@ -120,6 +117,15 @@ class Graph:
 		self.game_mode = settings['game_mode']
 		self.num_players = settings['num_players']
 		self.active_channels = settings['active_channels']
+		if self.active_channels is None:
+			self.active_channels = self.eeg_channels
+		
+		# Allocate deque for tracking average band power.
+		self.avg_band_power = deque([], maxlen=100)
+		avg = list()
+		for i in range(self.num_players):
+			avg.append(np.zeros(5))
+		self.avg_band_power.append(avg)
 
 		# Allocate deques for each player metric.
 		self.metrics = list()
@@ -218,11 +224,15 @@ class Graph:
 					#(ln_tmp,) = ax.plot([0], self.metric, animated=True, linewidth=0.8, color=colors[i%10]) # TODO: CHANGE THIS HERE 
 				elif i == num_channels+1: # Avg band power.
 					barcontainer = ax.bar(list(range(5)), np.ones(5), animated=True)
-					for b in barcontainer:
+					for i, b in enumerate(barcontainer):
+						b.set_color(colors[i])
 						self.ln_band.append(b)
+						
 					self.barplots.append(barcontainer)
 					ax.set_yscale('log')
 					ax.set_ylim(1, 100)
+					ax.set_xticks(list(range(5)))
+					ax.set_xticklabels(['Delta\n1-4Hz', 'Theta\n4-8Hz', 'Alpha\n8-13Hz', 'Beta\n13-30Hz', 'Gamma\n30-50Hz'])
 				elif i == num_channels+2: # Focus metric.
 					(ln_tmp,) = ax.plot([0], self.metrics[0], animated=True, linewidth=lsize, color=colors[i%10])
 					self.ln_focus.append(ln_tmp)
@@ -261,11 +271,15 @@ class Graph:
 					self.ln_ftt.append(ln_tmp) # only temp
 				elif i < 3*num_cols: # Avg band power.
 					barcontainer = ax.bar(list(range(5)), np.ones(5), animated=True)
-					for b in barcontainer:
+					for i, b in enumerate(barcontainer):
+						b.set_color(colors[i])
 						self.ln_band.append(b)
 					self.barplots.append(barcontainer)
 					ax.set_yscale('log')
 					ax.set_ylim(10**-5, 10*2)
+					ax.set_ylabel('Power (uV)^2/Hz', fontsize=fsize)
+					ax.set_xticks(list(range(5)))
+					ax.set_xticklabels(['Delta\n1-4Hz', 'Theta\n4-8Hz', 'Alpha\n8-13Hz', 'Beta\n13-30Hz', 'Gamma\n30-50Hz'])
 				else: # Focus metric.
 					(ln_tmp,) = ax.plot([0], self.metrics[i%num_cols], animated=True, linewidth=lsize, color=colors[i//self.num_players])
 					self.ln_focus.append(ln_tmp)
@@ -339,6 +353,7 @@ class Graph:
 
 		#self.get_fft(data)
 
+		# Calculate average band power.
 		self.get_band_power(data)
 
 		# Get metric prediction from the ML model
@@ -371,11 +386,11 @@ class Graph:
 		# FFT
 		for i, ln in enumerate(self.ln_ftt):
 			pass
-		# Average band power
 
+		# Average band power
 		for i, barcontainer in enumerate(self.barplots):
 			for j, b in enumerate(barcontainer):
-				b.set_height(self.avg_band_power[i][j])
+				b.set_height(self.current_band_power[i, j])
 		# Focus metric
 		for i, ln in enumerate(self.ln_focus):
 			relative_time = np.array(self.metric_times[i])-self.metric_times[i][-1]
@@ -406,17 +421,19 @@ class Graph:
 		Calculate average band power from the time series data. 5 Bands: 
 		1-4Hz, 4-8Hz, 8-13Hz, 13-30Hz, 30-50Hz.
 		"""
-		self.avg_band_power = list()
-		if self.game_mode == 'game': 
+		avg_bp = list()
+		if self.game_mode == 'game':
 			for i in range(self.num_players):
 				channel = self.active_channels[i]
 				avg, std = DataFilter.get_avg_band_powers(data, [channel], self.sampling_rate, True)
-				self.avg_band_power.append(avg)
+				avg_bp.append(avg)
 		elif self.game_mode == 'analysis':
 			avg, std = DataFilter.get_avg_band_powers(data, self.active_channels, self.sampling_rate, True)
-			self.avg_band_power.append(avg)
+			avg_bp.append(avg)
 		else: 
 			raise ValueError(f"Invalid option {self.game_mode}")
+		self.avg_band_power.append(avg_bp)
+		self.current_band_power = np.array(self.avg_band_power).mean(0)
 
 	def get_metric(self, data):
 		self.current_metrics = list()
@@ -513,12 +530,20 @@ def main():
 	params.timeout = args.timeout
 	params.file = args.file
 	
+	# Set active channels
+	if args.custom_channels is not None:
+		active_channels = args.custom_channels
+	elif args.game_mode == 'game':
+		active_channels = list(range(1, args.num_players+1))
+	else:
+		active_channels = None
+
 	# Game settings.
 	settings = {
 		'no_gui': args.no_gui,
 		'game_mode': args.game_mode,
 		'num_players': args.num_players if args.game_mode == 'game' else 1,
-		'active_channels': args.custom_channels if args.custom_channels is not None else list(range(1, args.num_players+1))
+		'active_channels': active_channels
 	}
 
 	g = None
