@@ -282,8 +282,8 @@ class GameLogic(Board):
 		MLClassifier().destroy_model()
 
 class BrainGameInterface:
-	def __init__(self, dpg):
-		self.dpg = dpg
+	def __init__(self, return_data):
+		self.return_data = return_data
 		# Set logging level.
 		BoardShim.enable_dev_board_logger()
 		logging.basicConfig(level=logging.DEBUG)
@@ -398,7 +398,7 @@ class BrainGameInterface:
 			
 			# Start threading
 			self.game_is_running = True
-			self.thread = threading.Thread(target=self.__game_update_loop, daemon=True)
+			self.thread = threading.Thread(target=self.__game_update_loop, daemon=False)
 			self.thread.start()
 			logging.info("Game started")
 
@@ -409,12 +409,32 @@ class BrainGameInterface:
 	def __game_update_loop(self):
 		"""Main thread function for game logic loop."""
 
+		self.init_fps()
 		while self.game_is_running:
 			# Update game logic one step, collect game info.
 			quantities, actions = self.game.update()
 			# Send game info to GUI for plotting.
-			main.update(self.dpg, quantities, actions)
+			self.return_data.put([quantities, actions])
 			#print(f"{np.random.random()}", end="\r")
+			self.calc_fps()
+			#print(f"FPS: {self.fps:.3f}", end='\r')
+
+
+	def init_fps(self):
+		self.fps = -1
+		self.lastTime = time.time()
+	
+	def calc_fps(self):
+		"""Calculate frames per second."""
+		now = time.time()
+		dt = now - self.lastTime
+		self.lastTime = now
+		if self.fps == -1:
+			self.fps = 1.0/dt
+		else: 
+			s = np.clip(dt*3., 0, 1)
+			self.fps = self.fps * (1-s) + (1.0/dt) * s
+
 
 
 	def callback_stop_game(self):
