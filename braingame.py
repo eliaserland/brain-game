@@ -1,5 +1,7 @@
 import argparse
 import time
+import logging
+from typing import Any
 import numpy as np
 from collections import deque
 
@@ -13,7 +15,7 @@ def parse_arguments():
 	are required for any specific board, e.g. for Cyton - set serial port.
 	"""
 	parser = argparse.ArgumentParser()
-	# Board options:
+	# BoardShim options:
 	parser.add_argument('--timeout',     type=int, required=False, default=0, help='timeout for device discovery or connection',)
 	parser.add_argument('--ip-port',     type=int, required=False, default=0, help='ip port',)
 	parser.add_argument('--ip-protocol', type=int, required=False, default=0, help='ip protocol, check IpProtocolType enum')
@@ -21,9 +23,11 @@ def parse_arguments():
 	parser.add_argument('--serial-port',     type=str, required=False, default='', help='serial port')
 	parser.add_argument('--mac-address',     type=str, required=False, default='', help='mac address')
 	parser.add_argument('--other-info',      type=str, required=False, default='', help='other info')
-	parser.add_argument('--streamer-params', type=str, required=False, default='', help='streamer params')
 	parser.add_argument('--serial-number',   type=str, required=False, default='', help='serial number')
 	parser.add_argument('--file',            type=str, required=False, default='', help='file')
+	# Streamer parameters:
+	parser.add_argument('--streamer-params', type=str, required=False, default='', help='streamer params')
+	# Board ID:
 	parser.add_argument('--board-id',        type=int, required=False, default=BoardIds.SYNTHETIC_BOARD, help='Board id, check docs to get a list of supported boards.')
 	# Game options:
 	parser.add_argument('--custom_channels', type=list[int], required=False, default=None, help='In game mode: custom channels for each player. Defaults to channels 1 to num_players.')
@@ -140,57 +144,232 @@ class FocusMetric(Board):
 		# Get time corresponding to the metric value.
 		time = data[self.timestamp_channel, -1]
 		self.time.append(time)
-		return self.metric, self.time
+
+		relative_time = np.array(self.time)-time
+		return list(relative_time), list(self.metric)
 
 class TimeSeries(Board):
 	def __init__(self, board_shim: BoardShim, active_channels: list[int], channel: int):
 		super().__init__(board_shim, active_channels)
 		self.channel = channel
+		self.time = list(reversed(-np.arange(0, self.num_points)/self.sampling_rate))
+		self.timeseries = np.zeros(self.num_points)
 
 	def get_time_series(self, data: np.ndarray):
-		pass
-
+		timeseries = data[self.channel]
+		self.timeseries[(self.num_points-len(timeseries)):] = timeseries
+		return  self.time, list(self.timeseries)
 
 class Player:
 	def __init__(self, board_shim: BoardShim, active_channels: list[int], channel: int):
+		self.timeseries = TimeSeries(board_shim, active_channels, channel)
 		self.bandp = AvgBandPower(board_shim, active_channels, channel)
 		self.focus = FocusMetric(board_shim, active_channels, channel)
 
 	def update(self, data: np.ndarray):
 		# Calculate all derived quantities, such as band power, focus metric etc.
+		time, timeseries = self.timeseries.get_time_series(data)
 		band_power  = self.bandp.get_band_power(data)
-		metric, metric_time = self.focus.get_metric(data)
+		metric_time, metric  = self.focus.get_metric(data)
+		# Collect all quantities to be plotted in a dictionary.
+		player_info = {
+			'time_series': (time, timeseries),
+			'band_power': band_power,
+			'focus_metric': (metric_time, metric)
+		}
+		return player_info
 
-		# Send quantities to the GUI.
+class FilterData(Board):
+	def __init__(self, board_shim: BoardShim, active_channels: list[int]):
+		super().__init__(board_shim, active_channels)
 
+	def filter_data(self, data: np.ndarray):
+		# Only filter active channels.
+		for i, channel in enumerate(self.active_channels):
+			pass
+			# Constant detrend, i.e. center data at y = 0
+			#DataFilter.detrend(data[channel], DetrendOperations.CONSTANT.value)
+			# Notch filter, remove 50Hz AC interference.
+			#DataFilter.remove_environmental_noise(data[channel], self.sampling_rate, NoiseTypes.FIFTY)
+			# Bandpass filter
+			#DataFilter.perform_bandpass(data[channel], self.sampling_rate, 51.0, 100.0, 2,
+			#				FilterTypes.BUTTERWORTH.value, 0)
+			#DataFilter.perform_bandpass(data[channel], self.sampling_rate, 51.0, 100.0, 2,
+			#                            FilterTypes.BUTTERWORTH.value, 0)
+			#DataFilter.perform_bandstop(data[channel], self.sampling_rate, 50.0, 4.0, 2,
+			#                            FilterTypes.BUTTERWORTH.value, 0)
+			#DataFilter.perform_bandstop(data[channel], self.sampling_rate, 60.0, 4.0, 2,
+			#                            FilterTypes.BUTTERWORTH.value, 0)
 
+class Action:
+	def __init__(self) -> None:
+		self.p1_actions = ['LEFT', 'RIGHT']
+		self.p2_actions = ['FORWARD', 'BACKWARD']
 
-class BrainGame(Board):
+	def perform_actions(self, quantities: list[dict[str, Any]]):
+		p1_action = self._decide(quantities[0])
+		p2_action = self._decide(quantities[1])
+
+		self._act_player1(p1_action)
+		self._act_player2(p1_action)
+		
+		actions = [self.p1_actions[p1_action], self.p2_actions[p2_action]]
+		return actions
+
+	def _decide(self, quantity: dict[str, Any], threshold: int=0.5):
+		_, focus = quantity['focus_metric']
+		metric = focus[-1] # TODO: Implement smarter selection than this.
+		if metric < threshold:
+			return 0
+		else:
+			return 1
+
+	def _act_player1(self, action: int):
+		"""Wrapper to call external motor control."""
+		if action:
+			pass # Higher than threshold. # TODO: implement this
+		else:
+			pass # Lower than threshold.  # TODO: implement this
+
+	def _act_player2(self, action):
+		"""Wrapper to call external motor control."""
+		if action:
+			pass # Higher than threshold. # TODO: implement this
+		else:
+			pass # Lower than threshold.  # TODO: implement this
+
+class GameLogic(Board):
 	def __init__(self, board_shim: BoardShim, active_channels: list[int]):
 		super().__init__(board_shim, active_channels)
 		self.p1 = Player(board_shim, active_channels, active_channels[0])
 		self.p2 = Player(board_shim, active_channels, active_channels[1])
+		self.filter = FilterData(board_shim, active_channels)
+		self.act = Action()
 
 	def update(self):
 		# Collect data from BCI board.
 		data = self.board_shim.get_current_board_data(self.num_points)
-		print(data.shape)
-		# Process the raw data, denoise signal.
 
-		# Send processed data to players
-		self.p1.update(data)
-		self.p2.update(data)
+		# Filter the raw data, denoise the signal.
+		self.filter.filter_data(data)
 
-		# Retrieve metrics, choose an action.
+		# Send data to players, calculate all derived quantities
+		q1 = self.p1.update(data)
+		q2 = self.p2.update(data)
+		quantities = (q1, q2)
 
-		# Send action to arduino
+		# Decide and send actions to arduino.
+		actions = self.act.perform_actions(quantities)
 
-		# Send quantities to the GUI ?
+		# Send derived quantities to GUI for plotting.
+		return quantities, actions
 
 	def destroy(self):
 		MLClassifier.destroy()
 
+class BrainGameInterface:
+	def __init__(self):
+		# Set logging level.
+		BoardShim.enable_dev_board_logger()
+		logging.basicConfig(level=logging.DEBUG)
+		# Parse program arguments
+		args = parse_arguments()
+		# Set appropriate BoardShim parameters.
+		params = set_brainflow_input_params(args)
+		# Set active channels.
+		active_channels = set_active_channels(args)
+		# Save settings.
+		self.params = params
+		self.active_channels = active_channels
+		self.board_id = args.board_id
+		self.streamer_params = args.streamer_params
+		# Preallocation for BoardShim
+		self.board_shim = None
+		self.has_initialized = False
 
-class Action:
-	def __init__(self) -> None:
+	def callback_apply_settings(self):
+		"""Apply current settings to the board."""
+		# Break early if there's no new settings to apply.
+		if self.has_initialized and not self.__has_settings_changed():
+			return
+
+		# If board is already running, stop the session.
+		if self.board_shim is not None and self.board_shim.is_prepared():
+			logging.info('Releasing session')
+			self.board_shim.release_session()
+		
+		# If this is not the first initial setup, apply new settings.
+		if self.has_initialized:
+			self.board_id = self.board_id_tmp
+			self.active_channels = self.active_channels_tmp
+			self.params.serial_port = self.serial_port_tmp
+		
+		try:
+			# Initialize board and prepare session.
+			board_shim = BoardShim(self.board_id, self.params)
+			board_shim.prepare_session()
+			logging.info('Preparing session')
+
+			# Activate differential mode.
+			if board_shim.board_id == BoardIds.CYTON_BOARD:
+				set_differential_mode(board_shim, self.active_channels)
+
+			# Save BoardShim and set flag.
+			self.board_shim = board_shim
+			self.has_initialized = True
+
+		except BaseException:
+			# Error handling.
+			logging.warning('Exception', exc_info=True)
+
+	def callback_discard_settings(self):
+		"""Discard current settings."""
+		self.board_id_tmp = self.board_id
+		self.active_channels_tmp = self.active_channels
+		self.serial_port_tmp = self.params.serial_port
+
+	def __has_settings_changed(self):
+		"""Return true if current settings are different to old settings."""
+		if (self.board_id == self.board_id_tmp
+		    and self.active_channels == self.active_channels_tmp
+		    and self.serial_port_tmp == self.params.serial_port):
+			return False
+		else:
+			return True
+
+	def callback_set_serial_port(self, serial_port: str):
+		self.serial_port_tmp = serial_port
+
+	def callback_set_board_id(self, board_id: int):
+		self.board_id_tmp = board_id
+
+	def callback_set_active_channels(self, active_channels: list[int]):
+		self.active_channels_tmp = active_channels
+
+	def callback_start_game(self):
+		# TODO: Need to verify that a session is running.
+		try: 
+			# Start streaming session.
+			self.board_shim.start_stream(450000, self.streamer_params)
+			
+			# Add delay for synthetic board, too fast otherwise.
+			if self.board_shim.board_id == BoardIds.SYNTHETIC_BOARD:
+				time.sleep(1)
+
+			# Set up the game logic
+			self.game = GameLogic(self.board_shim, self.active_channels)
+
+		except BaseException: 
+			# Error handling.
+			logging.warning('Exception', exc_info=True)
+
+	def update_TMP(self):
+		# Update game one step.
+		quantities, actions = self.game.update()
+		return quantities, actions
+
+	def callback_stop_game(self):
+		pass
+
+	def callback_end_game(self):
 		pass

@@ -77,17 +77,30 @@ def create_gui():
 
 
 def main():
+
 	# ------------------
+	# RUN FIRST THING AT PROGRAM START
 	# Parse program arguments and set the appropriate BrainFlow parameters.
 	args = parse_arguments()
 	params = set_brainflow_input_params(args)
 	
 	# Determine the active channels.
 	active_channels = set_active_channels(args)
+
+	board_id = args.board_id
+	streamer_params = args.streamer_params
 	# ------------------
 
+	# SHOW STARTUP SPLASH SCREEN (Press any key to start), overlayed by settings dialog.
+
+	# Apply settings to close dialog.
+
+	# When any key is pressed, show main game window.
+
+	game = None
 	try:
 		# ------------------
+		# APPLY SETTINGS
 		# Initialize board and prepare session.
 		board_shim = BoardShim(args.board_id, params)
 		board_shim.prepare_session()
@@ -96,6 +109,9 @@ def main():
 		if board_shim.board_id == BoardIds.CYTON_BOARD:
 			set_differential_mode(board_shim, active_channels)
 		
+
+		# ------------------
+		# START GAME
 		# Start streaming session.
 		board_shim.start_stream(450000, args.streamer_params)
 		if board_shim.board_id == BoardIds.SYNTHETIC_BOARD:
@@ -103,8 +119,7 @@ def main():
 		# ------------------
 
 		# Set up game data structures.
-		game = BrainGame(board_shim, active_channels)
-
+		game = GameLogic(board_shim, active_channels)
 
 		# ------------------
 		# Prepare GUI (these lines are always needed)
@@ -131,8 +146,9 @@ def main():
 		logging.warning('Exception', exc_info=True)
 	finally:
 		# Clean up GUI and game logic.
-		dpg.destroy_context()
-		game.destroy()
+		dpg.destroy_context() # TODO: if clause for if game exists
+		if game is not None:
+			game.destroy() # TODO: if clause for if game exists
 
 		# ------------------
 		# End streaming session.
