@@ -4,10 +4,13 @@ import logging
 from typing import Any
 import numpy as np
 from collections import deque
+import threading
 
 from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds, BrainFlowError
 from brainflow.data_filter import DataFilter, FilterTypes, AggOperations, NoiseTypes, WindowFunctions, DetrendOperations
 from brainflow.ml_model import BrainFlowMetrics, BrainFlowClassifiers, BrainFlowModelParams, MLModel
+
+import main
 
 def parse_arguments():
 	"""
@@ -116,23 +119,34 @@ class AvgBandPower(Board):
 		return current_band_power
 
 class MLClassifier:
-	"""Initialize BrainFlow machine learning classifier."""
-	model_params = BrainFlowModelParams(BrainFlowMetrics.RELAXATION, BrainFlowClassifiers.REGRESSION)
-	model = MLModel(model_params)
-	model.enable_ml_logger()
-	model.prepare()
+	model = None
+	model_params = None
 
 	@classmethod
-	def destroy(cls):
+	def configure(cls, metric: BrainFlowMetrics=BrainFlowMetrics.RELAXATION, 
+	             classifier: BrainFlowClassifiers=BrainFlowClassifiers.REGRESSION):
+		if cls.model is not None:
+			cls.destroy_model()
+		cls.model_params = BrainFlowModelParams(metric, classifier)
+		cls.model = MLModel(cls.model_params)
+		cls.model.enable_ml_logger()
+		cls.model.prepare()
+		return cls
+	
+	@classmethod
+	def destroy_model(cls):
 		cls.model.release()
+		cls.model = None
+		cls.model_params = None
 
 class FocusMetric(Board):
 	def __init__(self, board_shim: BoardShim, active_channels: list[int], channel: int):
 		super().__init__(board_shim, active_channels)
 		self.metric = deque([0], maxlen=self.num_points) 
 		self.time = deque([time.time()], maxlen=self.num_points)
-		self.model = MLClassifier.model
-		self.model_params = MLClassifier.model_params
+		classifier = MLClassifier.configure() # TODO: GET INPUT FROM SETTINGS DIALOGUE
+		self.model = classifier.model
+		self.model_params = classifier.model_params
 		self.channel = channel
 
 	def get_metric(self, data: np.ndarray):
@@ -265,10 +279,11 @@ class GameLogic(Board):
 		return quantities, actions
 
 	def destroy(self):
-		MLClassifier.destroy()
+		MLClassifier().destroy_model()
 
 class BrainGameInterface:
-	def __init__(self):
+	def __init__(self, dpg):
+		self.dpg = dpg
 		# Set logging level.
 		BoardShim.enable_dev_board_logger()
 		logging.basicConfig(level=logging.DEBUG)
@@ -283,40 +298,47 @@ class BrainGameInterface:
 		self.active_channels = active_channels
 		self.board_id = args.board_id
 		self.streamer_params = args.streamer_params
-		# Preallocation for BoardShim
+		# Variables to keep temporary settings in settings dialogue.
+		self.board_id_tmp = self.board_id
+		self.active_channels_tmp = self.active_channels
+		self.serial_port_tmp = self.params.serial_port
+		# Preallocation for BoardShim, GameLogic and game flag.
 		self.board_shim = None
-		self.has_initialized = False
+		self.game = None
+		self.game_is_running = False	
 
 	def callback_apply_settings(self):
 		"""Apply current settings to the board."""
-		# Break early if there's no new settings to apply.
-		if self.has_initialized and not self.__has_settings_changed():
-			return
-
-		# If board is already running, stop the session.
-		if self.board_shim is not None and self.board_shim.is_prepared():
-			logging.info('Releasing session')
-			self.board_shim.release_session()
-		
-		# If this is not the first initial setup, apply new settings.
-		if self.has_initialized:
+		# If BoardShim has been initialized before:
+		if self.board_shim is not None:
+			# Break early if there's no new settings to apply.
+			if not self.__has_settings_changed():
+				logging.info("No new settings to apply")
+				return
+			# Stop the session if board is already running.
+			if self.board_shim.is_prepared():
+				logging.info('Releasing board shim')
+				self.board_shim.release_session()
+			# Apply new settings.
 			self.board_id = self.board_id_tmp
 			self.active_channels = self.active_channels_tmp
 			self.params.serial_port = self.serial_port_tmp
 		
 		try:
-			# Initialize board and prepare session.
+			# Initialize BoardShim and prepare session.
 			board_shim = BoardShim(self.board_id, self.params)
 			board_shim.prepare_session()
-			logging.info('Preparing session')
+			logging.info('Board shim prepared')
 
 			# Activate differential mode.
 			if board_shim.board_id == BoardIds.CYTON_BOARD:
 				set_differential_mode(board_shim, self.active_channels)
+				logging.info("Differential mode set")
 
-			# Save BoardShim and set flag.
+			# Save BoardShim
 			self.board_shim = board_shim
-			self.has_initialized = True
+			self.new_settings = True
+			logging.info("Board shim initialized")
 
 		except BaseException:
 			# Error handling.
@@ -327,49 +349,109 @@ class BrainGameInterface:
 		self.board_id_tmp = self.board_id
 		self.active_channels_tmp = self.active_channels
 		self.serial_port_tmp = self.params.serial_port
+		logging.info("Settings discarded")
 
 	def __has_settings_changed(self):
 		"""Return true if current settings are different to old settings."""
 		if (self.board_id == self.board_id_tmp
 		    and self.active_channels == self.active_channels_tmp
-		    and self.serial_port_tmp == self.params.serial_port):
+		    and self.params.serial_port == self.serial_port_tmp):
 			return False
 		else:
 			return True
 
 	def callback_set_serial_port(self, serial_port: str):
 		self.serial_port_tmp = serial_port
+		logging.info("Serial port set")
 
 	def callback_set_board_id(self, board_id: int):
 		self.board_id_tmp = board_id
+		logging.info("Board ID set")
 
 	def callback_set_active_channels(self, active_channels: list[int]):
 		self.active_channels_tmp = active_channels
+		logging.info("Active channels set")
 
 	def callback_start_game(self):
-		# TODO: Need to verify that a session is running.
+		"""Start the main game."""
+		if self.game_is_running:
+			print("Game is already started")
+			return
+		# Verify that a session is prepared.
+		if self.board_shim is None or not self.board_shim.is_prepared():
+			logging.info("Applying settings")
+			self.callback_apply_settings()
+			
 		try: 
 			# Start streaming session.
 			self.board_shim.start_stream(450000, self.streamer_params)
 			
 			# Add delay for synthetic board, too fast otherwise.
 			if self.board_shim.board_id == BoardIds.SYNTHETIC_BOARD:
-				time.sleep(1)
+				time.sleep(0.5)
 
-			# Set up the game logic
-			self.game = GameLogic(self.board_shim, self.active_channels)
+			# On init setup or when settings are new, create the game logic.
+			if self.game is None or self.new_settings:
+				self.game = GameLogic(self.board_shim, self.active_channels)
+				self.new_settings = False
+				logging.info("Game logic created")
+			
+			# Start threading
+			self.game_is_running = True
+			self.thread = threading.Thread(target=self.__game_update_loop, daemon=True)
+			self.thread.start()
+			logging.info("Game started")
 
 		except BaseException: 
 			# Error handling.
 			logging.warning('Exception', exc_info=True)
 
-	def update_TMP(self):
-		# Update game one step.
-		quantities, actions = self.game.update()
-		return quantities, actions
+	def __game_update_loop(self):
+		"""Main thread function for game logic loop."""
+
+		while self.game_is_running:
+			# Update game logic one step, collect game info.
+			quantities, actions = self.game.update()
+			# Send game info to GUI for plotting.
+			main.update(self.dpg, quantities, actions)
+			#print(f"{np.random.random()}", end="\r")
+
 
 	def callback_stop_game(self):
-		pass
+		"""Stop the main game."""
+		# Halt any running game session.
+		if self.game_is_running:
+			# Stop game loop.
+			self.game_is_running = False
+			# Join Thread.
+			self.thread.join()
+			logging.info("Game stopped")
 
-	def callback_end_game(self):
-		pass
+			# Clean up game logic
+			self.game.destroy()
+			self.game = None
+			logging.info("Game logic destroyed")
+		else:
+			logging.info("No game is running")
+
+
+		## Halt any running game session.
+		#if self.game_is_running:
+		#	# Stop game loop.
+		#	self.game_is_running = False
+		#	# Join Thread.
+		#	self.thread.join()
+		#	logging.info("Game stopped")
+	
+		# Clean up game logic
+		#if self.game is not None:
+		#	self.game.destroy()
+		#	self.game = None
+		#	logging.info("Game logic destroyed")
+
+		# Clean up board shim.
+		if self.board_shim is not None and self.board_shim.is_prepared():
+			self.board_shim.release_session()
+			self.board_shim = None
+			logging.info('Board shim released')
+		
