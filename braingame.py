@@ -9,8 +9,11 @@ import threading
 from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds, BrainFlowError
 from brainflow.data_filter import DataFilter, FilterTypes, AggOperations, NoiseTypes, WindowFunctions, DetrendOperations
 from brainflow.ml_model import BrainFlowMetrics, BrainFlowClassifiers, BrainFlowModelParams, MLModel
+from numpy.lib.function_base import append
 
 from main import DataContainer
+
+WINDOW_SIZE = 5 # Seconds
 
 def parse_arguments():
 	"""
@@ -92,8 +95,9 @@ class Board:
 		self.board_id = board_shim.get_board_id()
 		self.eeg_channels = BoardShim.get_eeg_channels(self.board_id)
 		self.sampling_rate = BoardShim.get_sampling_rate(self.board_id)
-		self.window_size = 5
+		self.window_size = WINDOW_SIZE
 		self.num_points = self.window_size * self.sampling_rate
+		self.num_channels = self.board_shim.get_num_rows(self.board_id)
 		self.timestamp_channel = BoardShim.get_timestamp_channel(self.board_id)
 		self.active_channels = active_channels
 		# Limit no. of channels if testing with synthetic data
@@ -140,10 +144,20 @@ class MLClassifier:
 		cls.model_params = None
 
 class FocusMetric(Board):
-	def __init__(self, board_shim: BoardShim, active_channels: list[int], channel: int):
+	def __init__(self, board_shim: BoardShim, active_channels: list[int], channel: int, previous_metric: list, previous_time: list):
 		super().__init__(board_shim, active_channels)
-		self.metric = deque([0], maxlen=self.num_points) 
-		self.time = deque([time.time()], maxlen=self.num_points)
+		if previous_metric is None:
+			self.metric = deque([0], maxlen=self.num_points) 
+			self.time = deque([time.time()], maxlen=self.num_points)
+		else:
+			self.metric = deque([], maxlen=self.num_points)
+			for m in previous_metric:
+				self.metric.append(m)
+			self.time = deque([], maxlen=self.num_points)
+			now = time.time()
+			for t in previous_time:
+				self.time.append(t+now)
+
 		classifier = MLClassifier.configure() # TODO: GET INPUT FROM SETTINGS DIALOGUE
 		self.model = classifier.model
 		self.model_params = classifier.model_params
@@ -171,14 +185,18 @@ class TimeSeries(Board):
 
 	def get_time_series(self, data: np.ndarray):
 		timeseries = data[self.channel]
-		self.timeseries[(self.num_points-len(timeseries)):] = timeseries
-		return  self.time, list(self.timeseries)
+		#self.timeseries[(self.num_points-len(timeseries)):] = timeseries
+		return  self.time, list(timeseries) #list(self.timeseries)
 
 class Player:
-	def __init__(self, board_shim: BoardShim, active_channels: list[int], channel: int):
+	def __init__(self, board_shim: BoardShim, active_channels: list[int], channel: int, old_playerinfo):
+		if old_playerinfo is None:
+			previous_time, previous_metric = (None, None)
+		else:
+			previous_time, previous_metric = old_playerinfo['focus_metric']
 		self.timeseries = TimeSeries(board_shim, active_channels, channel)
 		self.bandp = AvgBandPower(board_shim, active_channels, channel)
-		self.focus = FocusMetric(board_shim, active_channels, channel)
+		self.focus = FocusMetric(board_shim, active_channels, channel, previous_metric, previous_time)
 
 	def update(self, data: np.ndarray):
 		# Calculate all derived quantities, such as band power, focus metric etc.
@@ -254,30 +272,47 @@ class Action:
 			pass # Lower than threshold.  # TODO: implement this
 
 class GameLogic(Board):
-	def __init__(self, board_shim: BoardShim, active_channels: list[int]):
+	def __init__(self, board_shim: BoardShim, active_channels: list[int], init_data: np.ndarray, old_quantities=None):
 		super().__init__(board_shim, active_channels)
-		self.p1 = Player(board_shim, active_channels, active_channels[0])
-		self.p2 = Player(board_shim, active_channels, active_channels[1])
+		if old_quantities is None:
+			(q1, q2) = None, None
+		else:
+			(q1, q2) = old_quantities
+		self.p1 = Player(board_shim, active_channels, active_channels[0], q1)
+		self.p2 = Player(board_shim, active_channels, active_channels[1], q2)
 		self.filter = FilterData(board_shim, active_channels)
 		self.act = Action()
+		if init_data is not None:
+			self.init_data = init_data
+		else: 
+			self.init_data = np.zeros((self.num_channels, self.num_points))
+		
 
 	def update(self):
 		# Collect data from BCI board.
 		data = self.board_shim.get_current_board_data(self.num_points)
 
+		# Merge into init/old data array.
+		if data.shape[1] < self.num_points:
+			self.data = np.zeros_like(self.init_data)
+			self.data[:, :(self.num_points- data.shape[1])] = self.init_data[:, data.shape[1]:]
+			self.data[:, (self.num_points- data.shape[1]):] = data
+		else:
+			self.data = data
+
 		# Filter the raw data, denoise the signal.
-		self.filter.filter_data(data)
+		self.filter.filter_data(self.data)
 
 		# Send data to players, calculate all derived quantities
-		q1 = self.p1.update(data)
-		q2 = self.p2.update(data)
+		q1 = self.p1.update(self.data)
+		q2 = self.p2.update(self.data)
 		quantities = (q1, q2)
 
 		# Decide and send actions to arduino.
 		actions = self.act.perform_actions(quantities)
 
 		# Send derived quantities to GUI for plotting.
-		return quantities, actions
+		return quantities, actions, self.data
 
 	def destroy(self):
 		MLClassifier().destroy_model()
@@ -305,7 +340,8 @@ class BrainGameInterface:
 		# Preallocation for BoardShim, GameLogic and game flag.
 		self.board_shim = None
 		self.game = None
-		self.game_is_running = False	
+		self.game_is_running = False
+		self.previous_data = None
 
 	def callback_apply_settings(self):
 		"""Apply current settings to the board."""
@@ -372,7 +408,7 @@ class BrainGameInterface:
 		self.active_channels_tmp = active_channels
 		logging.info("Active channels set")
 
-	def start_game(self, return_data: DataContainer):
+	def start_game(self, return_data: DataContainer, fresh_start=True):
 		"""Start the main game."""
 		if self.game_is_running:
 			print("Game is already started")
@@ -389,11 +425,18 @@ class BrainGameInterface:
 			
 			# Add delay for synthetic board, too fast otherwise.
 			if self.board_shim.board_id == BoardIds.SYNTHETIC_BOARD:
-				time.sleep(0.5)
+				#time.sleep(0.5)
+				pass
 
 			# On init setup or when settings are new, create the game logic.
 			if self.game is None or self.new_settings:
-				self.game = GameLogic(self.board_shim, self.active_channels)
+				if self.previous_data is not None:
+					init_data = self.previous_data
+					old_quantities = self.previous_quantities
+				else:
+					init_data = None
+					old_quantities = None
+				self.game = GameLogic(self.board_shim, self.active_channels, init_data, old_quantities)
 				self.new_settings = False
 				logging.info("Game logic created")
 			
@@ -409,16 +452,19 @@ class BrainGameInterface:
 
 	def __game_update_loop(self):
 		"""Main thread function for game logic loop."""
-
 		self.__init_fps()
 		while self.game_is_running:
 			# Update game logic one step, collect game info.
-			quantities, actions = self.game.update()
+			quantities, actions, data = self.game.update()
 			# Send game info to GUI for plotting.
-			self.return_data.put([quantities, actions])
-			#print(f"{np.random.random()}", end="\r")
+			self.return_data.put((quantities, actions))
 			self.__calc_fps()
 			#print(f"FPS: {self.fps:.3f}", end='\r')
+		
+		# At end, save last game state for next session.
+		self.previous_data = data
+		self.previous_quantities = quantities
+		self.previous_actions = actions
 
 	def __init_fps(self):
 		self.fps = -1
@@ -444,29 +490,13 @@ class BrainGameInterface:
 			# Join Thread.
 			self.game_thread.join()
 			logging.info("Game stopped")
-
 			# Clean up game logic
 			self.game.destroy()
 			self.game = None
 			logging.info("Game logic destroyed")
 		else:
 			logging.info("No game is running")
-
-
-		## Halt any running game session.
-		#if self.game_is_running:
-		#	# Stop game loop.
-		#	self.game_is_running = False
-		#	# Join Thread.
-		#	self.thread.join()
-		#	logging.info("Game stopped")
-	
-		# Clean up game logic
-		#if self.game is not None:
-		#	self.game.destroy()
-		#	self.game = None
-		#	logging.info("Game logic destroyed")
-
+			
 		# Clean up board shim.
 		if self.board_shim is not None and self.board_shim.is_prepared():
 			self.board_shim.release_session()
