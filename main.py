@@ -1,171 +1,264 @@
-import argparse
+from collections import deque
+import numpy as np
+import dearpygui.dearpygui as dpg
+import braingame
+import threading
 import time
 import logging
-import random
-import numpy as np
-
-import pyqtgraph as pg
-from pyqtgraph.Qt import QtGui, QtCore
-import pyqtgraph.ptime as ptime
-
-import brainflow
-from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds, BrainFlowError
-from brainflow.data_filter import DataFilter, FilterTypes, AggOperations, WindowFunctions, DetrendOperations
-
-# My stuff
-import matplotlib.pyplot as plt
-
-pg.setConfigOption('background', 'w')
-pg.setConfigOption('foreground', 'k')
 
 programName = 'BrainGame Curiosum'
-time_init = time.time()
-
-fps = None
-lastTime = ptime.time()
-
-class Graph:
-	def __init__(self, board_shim):
-		self.board_id = board_shim.get_board_id()
-		self.board_shim = board_shim
-		self.exg_channels = BoardShim.get_exg_channels(self.board_id)
-		self.sampling_rate = BoardShim.get_sampling_rate(self.board_id)
-		self.update_speed_ms = 10
-		self.window_size = 5 
-		self.num_points = self.window_size * self.sampling_rate
-		self.time_stamp_channel = BoardShim.get_timestamp_channel(self.board_id)
-		self.data = np.zeros((BoardShim.get_num_rows(self.board_id), self.num_points))
-		self.time = list(reversed(-np.arange(0, self.num_points)/self.sampling_rate))
-		
-
-		print("NUM_POINTS = " + str(self.num_points))
-
-		# ONLY TEMP
-		self.exg_channels = [1, 2, 3, 4, 5, 6, 7, 8]
-		
-
-		self.app = QtGui.QApplication([])
-		self.win = pg.GraphicsWindow(title=programName,size=(1200, 1000))
-		# Enable antialiasing for prettier plots
-		#pg.setConfigOptions(antialias=True)
+series1 = 0
+series2 = 0
+series3 = 0
+series4 = 0
+plt1 = 0
+plt2 = 0
+plt3 = 0 
+plt4 = 0
+btn1 = 0
 
 
-		self._init_timeseries()
+class DataContainer:
+	"""Container used for dynamic return data from game thread loop."""
+	def __init__(self):
+		self.data = None
+		self.cond = threading.Condition()
+		self.bypass = False
 
-		timer = QtCore.QTimer()
-		timer.timeout.connect(self.update)
-		timer.start(self.update_speed_ms)
-		QtGui.QApplication.instance().exec_()
-
-
-	def _init_timeseries(self):
-		ylim = 20
-		self.plots = list()
-		self.curves = list()
-		for i in range(len(self.exg_channels)):
-			p = self.win.addPlot(row=i,col=0)
-			p.showAxis('left', True)
-			p.setMenuEnabled('left', False)
-			p.showAxis('bottom', True)
-			p.setMenuEnabled('bottom', True)
-			p.setYRange(-ylim, ylim, padding=5)
-
-			p.setLabel('left', "Pot", units='uV')	
-			p.setLabel('bottom', "Time", units='s')
-			if i == 0:
-				p.setTitle('TimeSeries Plot')
-			self.plots.append(p)
-			curve = p.plot(pen=pg.mkPen('k', width=2))
-			self.curves.append(curve)
-
-	def update(self):
-		global fps, lastTime
-		# Get data from board
-		board_data = self.board_shim.get_current_board_data(self.num_points)
-
-		series_len = board_data.shape[1]
-		self.data[:, (self.num_points-series_len):] = board_data
-
-		avg_bands = [0, 0, 0, 0, 0]
-		for count, channel in enumerate(self.exg_channels):
-			# plot timeseries
-			#DataFilter.detrend(self.data[channel], DetrendOperations.CONSTANT.value)
-			#DataFilter.perform_bandpass(self.data[channel], self.sampling_rate, 51.0, 100.0, 2,
-			#						FilterTypes.BUTTERWORTH.value, 0)
-			#DataFilter.perform_bandpass(self.data[channel], self.sampling_rate, 51.0, 100.0, 2,
-			#							FilterTypes.BUTTERWORTH.value, 0)
-			#DataFilter.perform_bandstop(self.data[channel], self.sampling_rate, 50.0, 4.0, 2,
-			#							FilterTypes.BUTTERWORTH.value, 0)
-			#DataFilter.perform_bandstop(self.data[channel], self.sampling_rate, 60.0, 4.0, 2,
-			#							FilterTypes.BUTTERWORTH.value, 0)
-			self.curves[count].setData(self.time, self.data[channel])
-
-		#self.app.processEvents()
-
-		now = ptime.time()
-		dt = now - lastTime
-		lastTime = now
-		if fps is None:
-			fps = 1.0/dt
-		else:
-			s = np.clip(dt*3., 0, 1)
-			fps = fps * (1-s) + (1.0/dt) * s
-		print('%0.2f fps' % fps)
-		#self.app.processEvents()  ## force complete redraw for every plot
-
-def main():
-	# Set logging level.
-	BoardShim.enable_dev_board_logger()
-	logging.basicConfig(level=logging.DEBUG)
-
-	# Parse command line arguments. Use docs to check which parameters are 
-	# required for specific board, e.g. for Cyton - set serial port.
-	parser = argparse.ArgumentParser()
-	parser.add_argument('--timeout',     type=int, required=False, default=0, help='timeout for device discovery or connection',)
-	parser.add_argument('--ip-port',     type=int, required=False, default=0, help='ip port',)
-	parser.add_argument('--ip-protocol', type=int, required=False, default=0, help='ip protocol, check IpProtocolType enum')
-	parser.add_argument('--ip-address',      type=str, required=False, default='', help='ip address')
-	parser.add_argument('--serial-port',     type=str, required=False, default='', help='serial port')
-	parser.add_argument('--mac-address',     type=str, required=False, default='', help='mac address')
-	parser.add_argument('--other-info',      type=str, required=False, default='', help='other info')
-	parser.add_argument('--streamer-params', type=str, required=False, default='', help='streamer params')
-	parser.add_argument('--serial-number',   type=str, required=False, default='', help='serial number')
-	parser.add_argument('--file',            type=str, required=False, default='', help='file')
-	parser.add_argument('--board-id',        type=int, required=False, default=BoardIds.SYNTHETIC_BOARD, help='board id, check docs to get a list of supported boards')
-	args = parser.parse_args()
-
-	# Set parsed parameters in BrainFlowInputParams structure.
-	params = BrainFlowInputParams()
-	params.ip_port = args.ip_port
-	params.serial_port = args.serial_port
-	params.mac_address = args.mac_address
-	params.other_info = args.other_info
-	params.serial_number = args.serial_number
-	params.ip_address = args.ip_address
-	params.ip_protocol = args.ip_protocol
-	params.timeout = args.timeout
-	params.file = args.file
-
-	try:
-		# Start session.
-		board_shim = BoardShim(args.board_id, params)
-		board_shim.prepare_session()
-		board_shim.start_stream(450000, args.streamer_params)
-		
-		# Start plotting.
-		g = Graph(board_shim)
-		
-	except BaseException as e:
-		# Error handling.
-		logging.warning('Exception', exc_info=True)
+	def put(self, data):
+		"""Place data into the container."""
+		with self.cond:
+			self.data = data
+			self.cond.notify()
+	def get(self):
+		"""Retrieve data from the container."""
+		if not self.bypass:
+			with self.cond:
+				self.cond.wait()
+				data = self.data
+		return data
 	
-	finally:
-		# End session.
-		logging.info('End')
-		if board_shim.is_prepared():
-			logging.info('Releasing session')
-			board_shim.release_session()
+	def destroy(self):
+		"""Destroy the container."""
+		self.bypass = True
+		with self.cond:
+			self.cond.notify()
 
+class GUI:
+	def __init__(self) -> None:
+		# Create an instance of the main game.
+		self.game = braingame.BrainGameInterface()
+		self.game_is_running = False
+
+	def callback_start_game(self):
+		"""Callback to start a new game."""
+		if not self.game_is_running:
+			logging.info("Starting game")
+			# Set flag.
+			self.game_is_running = True
+			# Create a container used for housing return data from game loop.
+			self.data = DataContainer()
+			# Start the main game loop.
+			self.game.start_game(self.data)
+			# Start gui plotting thread.
+			self.thread = threading.Thread(target=self.__gui_loop, daemon=False)
+			self.thread.start()
+		else:
+			logging.info("Game is already running")
+
+	def callback_stop_game(self):
+		"""Callback to stop and end a running game."""
+		if self.game_is_running:
+			logging.info("Stopping game")
+			self.game_is_running = False
+			self.game.stop_game()
+			self.data.destroy()
+			self.thread.join()
+		else:
+			logging.info("No game is running")
+
+	def callback_restart_game(self):
+		pass
+
+	def callback_settings_menu(self):
+		pass
+
+	def callback_press_any_key(self):
+		pass
+
+	def callback_timeseries_settings(self):
+		pass
+
+	def callback_focus_settings(self):
+		pass
+
+	def __gui_loop(self):
+		"""Main thread function for updating the GUI plots during a game."""
+		global series1, series2, series3, series4
+		
+		self.__init_fps()
+		while self.game_is_running:
+
+			return_data = self.data.get()
+			self.__update_plots(return_data)
+	
+			self.__calc_fps()
+			print(f"FPS: {self.fps:.3f}", end='\r')
+	
+	def __update_plots(self, data):
+			(player1, player2), actions = data
+			time1, timeseries1 = player1['time_series']
+			time2, timeseries2 = player2['time_series']
+			metric_time1, metric1 = player1['focus_metric']
+			metric_time2, metric2 = player2['focus_metric']
+
+			#print("Actions: " + ' '.join(actions) + f"  {metric1[-1]:.5f} {metric2[-1]:.5f}", end='\r')
+			dpg.set_value(series1, [list(time1), list(timeseries1)])
+			dpg.set_value(series2, [list(time2), list(timeseries2)])
+			dpg.set_value(series3, [list(metric_time1), list(metric1)])
+			dpg.set_value(series4, [list(metric_time2), list(metric2)])
+
+	def __init_fps(self):
+		self.fps = -1
+		self.lastTime = time.time()
+	
+	def __calc_fps(self):
+		"""Calculate frames per second."""
+		now = time.time()
+		dt = now - self.lastTime
+		self.lastTime = now
+		if self.fps == -1:
+			self.fps = 1.0/dt
+		else: 
+			s = np.clip(dt*3., 0, 1)
+			self.fps = self.fps * (1-s) + (1.0/dt) * s
+
+	def create_window(self):
+		"""Create the main window. """
+		global series1, series2, series3, series4
+		global plt1, plt2, plt3, plt4, btn1
+
+		#data = self.game.get_init_data()
+
+		with dpg.window(tag='Time Series'):
+			dpg.set_exit_callback(callback=self.callback_stop_game)
+			
+			with dpg.group(horizontal=True):
+				btn1 = dpg.add_button(label="  Apply  ", callback=self.game.callback_apply_settings)
+				dpg.add_button(label=" Discard ", callback=self.game.callback_discard_settings)
+				dpg.add_button(label="  Start  ", callback=self.callback_start_game)
+				dpg.add_button(label="  Stop   ", callback=self.callback_stop_game)
+
+			y_min = -100
+			y_max = 100
+			width = 620
+			height = 375
+			with dpg.group(horizontal=True):
+				with dpg.plot(label='Player 1 - Time Series', width=width, height=height, anti_aliased=True) as plt1:
+					# optionally create legend
+					dpg.add_plot_legend()
+
+					# REQUIRED: create x and y axes
+					x_axis = dpg.add_plot_axis(dpg.mvXAxis, label="Time (s)")
+					y_axis = dpg.add_plot_axis(dpg.mvYAxis, label="Voltage (uV)")
+
+					# series belong to a y axis
+					series1 = dpg.add_line_series(list(range(10)), list(np.ones(10)), parent=y_axis)
+					dpg.set_axis_limits(y_axis, y_min, y_max)
+					dpg.set_axis_limits(x_axis, -5, 0)
+
+				with dpg.plot(label='Player 2 - Time Series', width=width, height=height, anti_aliased=True) as plt2:
+					# optionally create legend
+					dpg.add_plot_legend()
+
+					# REQUIRED: create x and y axes
+					x_axis2 = dpg.add_plot_axis(dpg.mvXAxis, label="Time (s)")
+					y_axis2 = dpg.add_plot_axis(dpg.mvYAxis, label="Voltage (uV)")
+
+					# series belong to a y axis
+					series2 =  dpg.add_line_series(list(range(10)), list(np.ones(10)), parent=y_axis2)
+					dpg.set_axis_limits(y_axis2, y_min, y_max)
+					dpg.set_axis_limits(x_axis2, -5, 0)
+			with dpg.group(horizontal=True):
+				with dpg.plot(label='Player 1 - Foucs Metric', width=width, height=height, anti_aliased=True) as plt3:
+					# optionally create legend
+					dpg.add_plot_legend()
+
+					# REQUIRED: create x and y axes
+					x_axis3 = dpg.add_plot_axis(dpg.mvXAxis, label="Time (s)")
+					y_axis3 = dpg.add_plot_axis(dpg.mvYAxis, label="Metric")
+
+					# series belong to a y axis
+					series3 = dpg.add_line_series(list(range(10)), list(np.ones(10)), parent=y_axis3)
+					dpg.set_axis_limits(y_axis3, -0.005, 1.005)
+					dpg.set_axis_limits(x_axis3, -5, 0)
+				
+				with dpg.plot(label='Player 2 - Focus Metric', width=width, height=height, anti_aliased=True) as plt4:
+					# optionally create legend
+					dpg.add_plot_legend()
+
+					# REQUIRED: create x and y axes
+					x_axis4 = dpg.add_plot_axis(dpg.mvXAxis, label="Time (s)")
+					y_axis4 = dpg.add_plot_axis(dpg.mvYAxis, label="Metric")
+
+					# series belong to a y axis
+					series4 = dpg.add_line_series(list(range(10)), list(np.ones(10)), parent=y_axis4)
+					dpg.set_axis_limits(y_axis4, -0.005, 1.005)
+					dpg.set_axis_limits(x_axis4, -5, 0)
+
+	
+def window_resize():
+		global plt1, plt2, plt3, plt4, btn1
+		plots = [plt1, plt2, plt3, plt4]
+		xpos = [0, 0, 1, 1]
+		ypos = [0, 1, 0, 1]
+		btn_height = dpg.get_item_height(btn1)
+		#h = dpg.get_item_height("Time Series") - btn_height - 45
+		h = dpg.get_viewport_client_height() - btn_height - 45
+		#w = dpg.get_item_width("Time Series") - 40
+		w = dpg.get_viewport_client_width() - 40
+		for i, p in enumerate(plots):
+			dpg.set_item_height(p, height=h//2)
+			dpg.set_item_width(p, width=w//2)
+			dpg.set_item_pos(p, [(w//2)*xpos[i], (h//2)*ypos[i],])
+		#dpg.set_item_height("win", h//2)
+		#dpg.set_item_width("win", w//2)
+
+	
+def main():
+	gui = GUI()
+
+	#------------------------
+	# Prepare dearpygui (these lines are always needed)
+	dpg.create_context()
+	#------------------------
+
+	#dpg.show_metrics()
+	gui.create_window()
+	#dpg.show_debug()
+	
+	#------------------------
+	# (these lines are always needed)
+	dpg.create_viewport(title=programName, vsync=False, resizable=True, width=1280, height=800)
+	# must be called before showing viewport
+	#pg.set_viewport_small_icon("path/to/icon.ico")
+	#dpg.set_viewport_large_icon("path/to/icon.ico")
+	dpg.setup_dearpygui()
+	dpg.show_viewport()
+	#------------------------
+	
+	
+	dpg.set_primary_window("Time Series", True)
+
+	dpg.set_viewport_resize_callback(callback=window_resize)
+	
+
+	#dpg.maximize_viewport()
+
+	#------------------------
+	# (these lines are always needed)
+	dpg.start_dearpygui()
+	dpg.destroy_context()
 
 if __name__ == '__main__':
 	main()
