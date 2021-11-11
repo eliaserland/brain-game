@@ -12,46 +12,62 @@ series4 = 0
 
 
 class DataContainer:
+	"""Container used for dynamic return data from game thread loop."""
 	def __init__(self):
-		self.data = []
-		self.sem = threading.Semaphore(value=0)
+		self.data = None
+		self.cond = threading.Condition()
+		self.bypass = False
+
 	def put(self, data):
-		self.data = data
-		self.sem.release()
+		"""Place data into the container."""
+		with self.cond:
+			self.data = data
+			self.cond.notify()
 	def get(self):
-		self.sem.acquire()
-		return self.data
+		"""Retrieve data from the container."""
+		if not self.bypass:
+			with self.cond:
+				self.cond.wait()
+				data = self.data
+		return data
+	
+	def destroy(self):
+		"""Destroy the container."""
+		self.bypass = True
+		with self.cond:
+			self.cond.notify()
 
 
-data = DataContainer()
-
-class Plotter:
-	def __init__(self, game) -> None:
+class GUI:
+	def __init__(self, game, data) -> None:
 		self.game = game
+		self.data = data
 
-	def callback_start_game(self, game):
+	def callback_start_game(self):
 		self.game.callback_start_game()
 
 		self.plotter_active = True
 		self.thread = threading.Thread(target=self._update_loop, daemon=False)
 		self.thread.start()
 
-	def callback_stop_game(self, game):
-		
+	def callback_stop_game(self):
+		print("HERE")
 		self.game.callback_stop_game()
-		
+		print("HERE2")
 		self.plotter_active = False
+		self.data.destroy()
+		print("HERE3")
 		self.thread.join()
+		print("HERE4")
 
 	def _update_loop(self):
-		global data
 		global series1, series2, series3, series4
 		#print(series1, series2, series3, series4)
 		flag = True
 		self.init_fps()
 		while self.plotter_active:
 
-			d = data.get()
+			d = self.data.get()
 			if not d:
 				#print("Wrong")
 				continue
@@ -59,6 +75,7 @@ class Plotter:
 			quantities = d[0]
 			actions = d[1]
 			 
+			#print("HEJ")
 			q1, q2 = quantities
 
 			time1, timeseries1 = q1['time_series']
@@ -96,11 +113,11 @@ class Plotter:
 def create_window(game, plotter):
 	global series1, series2, series3, series4
 
+
 	with dpg.window(tag='Time Series'):
 		dpg.set_exit_callback(callback=plotter.callback_stop_game)
 		
-		with dpg.group(horizontal=True):
-			
+		with dpg.group(horizontal=True):			
 			dpg.add_button(label="  Apply  ", callback=game.callback_apply_settings)
 			dpg.add_button(label=" Discard ", callback=game.callback_discard_settings)
 			dpg.add_button(label="  Start  ", callback=plotter.callback_start_game)
@@ -166,14 +183,21 @@ def create_window(game, plotter):
 
 def main():
 
+	# Create a container used for housing return data from game loop.
+	data = DataContainer()
+
 	#game.callback_start_game()
 	game = braingame.BrainGameInterface(data)
-	plotter = Plotter(game)
+	
+	
+	plotter = GUI(game, data)
 
 	# Prepare GUI (these lines are always needed)
 	dpg.create_context()
 	
 	create_window(game, plotter)
+	
+	
 	dpg.show_metrics()
 	#dpg.show_debug()
 	

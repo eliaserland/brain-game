@@ -10,8 +10,6 @@ from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds, Brai
 from brainflow.data_filter import DataFilter, FilterTypes, AggOperations, NoiseTypes, WindowFunctions, DetrendOperations
 from brainflow.ml_model import BrainFlowMetrics, BrainFlowClassifiers, BrainFlowModelParams, MLModel
 
-import main
-
 def parse_arguments():
 	"""
 	Parse command line arguments. Use brainflow docs to check which parameters 
@@ -198,6 +196,7 @@ class FilterData(Board):
 		super().__init__(board_shim, active_channels)
 
 	def filter_data(self, data: np.ndarray):
+		""""""
 		# Only filter active channels.
 		for i, channel in enumerate(self.active_channels):
 			pass
@@ -221,8 +220,8 @@ class Action:
 		self.p2_actions = ['FORWARD', 'BACKWARD']
 
 	def perform_actions(self, quantities: list[dict[str, Any]]):
-		p1_action = self._decide(quantities[0])
-		p2_action = self._decide(quantities[1])
+		p1_action = self._decide(quantities[0]) # TODO: Get threshold from settings.
+		p2_action = self._decide(quantities[1]) # TODO: Get threshold from settings.
 
 		self._act_player1(p1_action)
 		self._act_player2(p1_action)
@@ -398,8 +397,8 @@ class BrainGameInterface:
 			
 			# Start threading
 			self.game_is_running = True
-			self.thread = threading.Thread(target=self.__game_update_loop, daemon=False)
-			self.thread.start()
+			self.game_thread = threading.Thread(target=self.__game_update_loop, daemon=False)
+			self.game_thread.start()
 			logging.info("Game started")
 
 		except BaseException: 
@@ -444,7 +443,7 @@ class BrainGameInterface:
 			# Stop game loop.
 			self.game_is_running = False
 			# Join Thread.
-			self.thread.join()
+			self.game_thread.join()
 			logging.info("Game stopped")
 
 			# Clean up game logic
