@@ -10,6 +10,8 @@ from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds, Brai
 from brainflow.data_filter import DataFilter, FilterTypes, AggOperations, NoiseTypes, WindowFunctions, DetrendOperations
 from brainflow.ml_model import BrainFlowMetrics, BrainFlowClassifiers, BrainFlowModelParams, MLModel
 
+from main import DataContainer
+
 def parse_arguments():
 	"""
 	Parse command line arguments. Use brainflow docs to check which parameters 
@@ -281,8 +283,7 @@ class GameLogic(Board):
 		MLClassifier().destroy_model()
 
 class BrainGameInterface:
-	def __init__(self, return_data):
-		self.return_data = return_data
+	def __init__(self):
 		# Set logging level.
 		BoardShim.enable_dev_board_logger()
 		logging.basicConfig(level=logging.DEBUG)
@@ -371,11 +372,12 @@ class BrainGameInterface:
 		self.active_channels_tmp = active_channels
 		logging.info("Active channels set")
 
-	def callback_start_game(self):
+	def start_game(self, return_data: DataContainer):
 		"""Start the main game."""
 		if self.game_is_running:
 			print("Game is already started")
 			return
+		self.return_data = return_data
 		# Verify that a session is prepared.
 		if self.board_shim is None or not self.board_shim.is_prepared():
 			logging.info("Applying settings")
@@ -408,22 +410,21 @@ class BrainGameInterface:
 	def __game_update_loop(self):
 		"""Main thread function for game logic loop."""
 
-		self.init_fps()
+		self.__init_fps()
 		while self.game_is_running:
 			# Update game logic one step, collect game info.
 			quantities, actions = self.game.update()
 			# Send game info to GUI for plotting.
 			self.return_data.put([quantities, actions])
 			#print(f"{np.random.random()}", end="\r")
-			self.calc_fps()
+			self.__calc_fps()
 			#print(f"FPS: {self.fps:.3f}", end='\r')
 
-
-	def init_fps(self):
+	def __init_fps(self):
 		self.fps = -1
 		self.lastTime = time.time()
 	
-	def calc_fps(self):
+	def __calc_fps(self):
 		"""Calculate frames per second."""
 		now = time.time()
 		dt = now - self.lastTime
@@ -434,9 +435,7 @@ class BrainGameInterface:
 			s = np.clip(dt*3., 0, 1)
 			self.fps = self.fps * (1-s) + (1.0/dt) * s
 
-
-
-	def callback_stop_game(self):
+	def stop_game(self):
 		"""Stop the main game."""
 		# Halt any running game session.
 		if self.game_is_running:
