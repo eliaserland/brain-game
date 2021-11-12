@@ -1,10 +1,13 @@
-from collections import deque
+
+from brainflow.board_shim import BoardIds
 import numpy as np
 import dearpygui.dearpygui as dpg
 import braingame
 import threading
 import time
 import logging
+
+from datacontainer import DataContainer
 
 programName = 'BrainGame Curiosum'
 series1 = 0
@@ -18,32 +21,6 @@ plt4 = 0
 btn1 = 0
 
 
-class DataContainer:
-	"""Container used for dynamic return data from game thread loop."""
-	def __init__(self):
-		self.data = None
-		self.cond = threading.Condition()
-		self.bypass = False
-
-	def put(self, data):
-		"""Place data into the container."""
-		with self.cond:
-			self.data = data
-			self.cond.notify()
-	def get(self):
-		"""Retrieve data from the container."""
-		if not self.bypass:
-			with self.cond:
-				self.cond.wait()
-				data = self.data
-		return data
-	
-	def destroy(self):
-		"""Destroy the container."""
-		self.bypass = True
-		with self.cond:
-			self.cond.notify()
-
 class GUI:
 	def __init__(self) -> None:
 		# Create an instance of the main game.
@@ -53,16 +30,20 @@ class GUI:
 	def callback_start_game(self):
 		"""Callback to start a new game."""
 		if not self.game_is_running:
-			logging.info("Starting game")
-			# Set flag.
-			self.game_is_running = True
-			# Create a container used for housing return data from game loop.
-			self.data = DataContainer()
-			# Start the main game loop.
-			self.game.start_game(self.data)
-			# Start gui plotting thread.
-			self.thread = threading.Thread(target=self.__gui_loop, daemon=False)
-			self.thread.start()
+			try:
+				logging.info("Starting game")
+				# Set flag.
+				self.game_is_running = True
+				# Create a container used for housing return data from game loop.
+				self.data = DataContainer()
+				# Start the main game loop.
+				self.game.start_game(self.data)
+				# Set flag & start gui plotting thread
+				self.game_is_running = True
+				self.thread = threading.Thread(target=self.__gui_loop, daemon=False)
+				self.thread.start()
+			except BaseException:
+				logging.warning('Exception', exc_info=True)
 		else:
 			logging.info("Game is already running")
 
@@ -139,72 +120,106 @@ class GUI:
 		global plt1, plt2, plt3, plt4, btn1
 
 		#data = self.game.get_init_data()
+		dpg.set_exit_callback(callback=self.callback_stop_game)
+
+		
 
 		with dpg.window(tag='Time Series'):
-			dpg.set_exit_callback(callback=self.callback_stop_game)
-			
 			with dpg.group(horizontal=True):
-				btn1 = dpg.add_button(label="  Apply  ", callback=self.game.callback_apply_settings)
-				dpg.add_button(label=" Discard ", callback=self.game.callback_discard_settings)
-				dpg.add_button(label="  Start  ", callback=self.callback_start_game)
-				dpg.add_button(label="  Stop   ", callback=self.callback_stop_game)
+				with dpg.child_window(width=116):
+					# Main game buttons
+					btn_width = 100 
+					dpg.add_button(label="Start", callback=self.callback_start_game, width=btn_width)
+					dpg.add_button(label="Stop", callback=self.callback_stop_game, width=btn_width)
+					btn = dpg.add_button(label="Settings", width=btn_width)
 
-			y_min = -100
-			y_max = 100
-			width = 620
-			height = 375
-			with dpg.group(horizontal=True):
-				with dpg.plot(label='Player 1 - Time Series', width=width, height=height, anti_aliased=True) as plt1:
-					# optionally create legend
-					dpg.add_plot_legend()
+					# Settings menu
+					with dpg.popup(btn, mousebutton=dpg.mvMouseButton_Left, modal=True, tag="modal_id"):
+						
+						def callback():
+							board_name = dpg.get_value('boardid_combo')
+							board_id = BoardIds.__getitem__(board_name).value
+							self.game.callback_set_board_id(board_id)
 
-					# REQUIRED: create x and y axes
-					x_axis = dpg.add_plot_axis(dpg.mvXAxis, label="Time (s)")
-					y_axis = dpg.add_plot_axis(dpg.mvYAxis, label="Voltage (uV)")
+						boards = BoardIds._member_names_
+						combo1 = dpg.add_combo(boards, label="Board ID", default_value=boards[2], tag='boardid_combo', callback=callback)
 
-					# series belong to a y axis
-					series1 = dpg.add_line_series(list(range(10)), list(np.ones(10)), parent=y_axis)
-					dpg.set_axis_limits(y_axis, y_min, y_max)
-					dpg.set_axis_limits(x_axis, -5, 0)
 
-				with dpg.plot(label='Player 2 - Time Series', width=width, height=height, anti_aliased=True) as plt2:
-					# optionally create legend
-					dpg.add_plot_legend()
+						dpg.add_spacer(height=10)
+						with dpg.group(horizontal=True):
+							btn_width = 100 
+							def callback_ok():
+								self.game.callback_apply_settings()
+								dpg.configure_item("modal_id", show=False)
+							def callback_cancel():
+								self.game.callback_discard_settings()
+								dpg.configure_item("modal_id", show=False)
+							def callback_reset():
+								dpg.set_value('boardid_combo', value=BoardIds._member_names_[2])
+								self.game.callback_discard_settings()
 
-					# REQUIRED: create x and y axes
-					x_axis2 = dpg.add_plot_axis(dpg.mvXAxis, label="Time (s)")
-					y_axis2 = dpg.add_plot_axis(dpg.mvYAxis, label="Voltage (uV)")
+							dpg.add_button(label="OK", callback=callback_ok, width=btn_width)
+							btn1 = dpg.add_button(label="Reset", callback=callback_reset, width=btn_width)
+							dpg.add_button(label="Cancel", callback=callback_cancel, width=btn_width)
 
-					# series belong to a y axis
-					series2 =  dpg.add_line_series(list(range(10)), list(np.ones(10)), parent=y_axis2)
-					dpg.set_axis_limits(y_axis2, y_min, y_max)
-					dpg.set_axis_limits(x_axis2, -5, 0)
-			with dpg.group(horizontal=True):
-				with dpg.plot(label='Player 1 - Foucs Metric', width=width, height=height, anti_aliased=True) as plt3:
-					# optionally create legend
-					dpg.add_plot_legend()
+				with dpg.child_window(autosize_x=True):
 
-					# REQUIRED: create x and y axes
-					x_axis3 = dpg.add_plot_axis(dpg.mvXAxis, label="Time (s)")
-					y_axis3 = dpg.add_plot_axis(dpg.mvYAxis, label="Metric")
+					y_min = -100
+					y_max = 100
+					width = 620
+					height = 375
+					with dpg.group(horizontal=True):
+						with dpg.plot(label='Player 1 - Time Series', width=width, height=height, anti_aliased=True) as plt1:
+							# optionally create legend
+							dpg.add_plot_legend()
 
-					# series belong to a y axis
-					series3 = dpg.add_line_series(list(range(10)), list(np.ones(10)), parent=y_axis3)
-					dpg.set_axis_limits(y_axis3, -0.005, 1.005)
-					dpg.set_axis_limits(x_axis3, -5, 0)
-				
-				with dpg.plot(label='Player 2 - Focus Metric', width=width, height=height, anti_aliased=True) as plt4:
-					# optionally create legend
-					dpg.add_plot_legend()
+							# REQUIRED: create x and y axes
+							x_axis = dpg.add_plot_axis(dpg.mvXAxis, label="Time (s)")
+							y_axis = dpg.add_plot_axis(dpg.mvYAxis, label="Voltage (uV)")
 
-					# REQUIRED: create x and y axes
-					x_axis4 = dpg.add_plot_axis(dpg.mvXAxis, label="Time (s)")
-					y_axis4 = dpg.add_plot_axis(dpg.mvYAxis, label="Metric")
+							# series belong to a y axis
+							series1 = dpg.add_line_series(list(range(10)), list(np.ones(10)), parent=y_axis)
+							dpg.set_axis_limits(y_axis, y_min, y_max)
+							dpg.set_axis_limits(x_axis, -5, 0)
 
-					# series belong to a y axis
-					series4 = dpg.add_line_series(list(range(10)), list(np.ones(10)), parent=y_axis4)
-					dpg.set_axis_limits(y_axis4, -0.005, 1.005)
-					dpg.set_axis_limits(x_axis4, -5, 0)
+						with dpg.plot(label='Player 2 - Time Series', width=width, height=height, anti_aliased=True) as plt2:
+							# optionally create legend
+							dpg.add_plot_legend()
+
+							# REQUIRED: create x and y axes
+							x_axis2 = dpg.add_plot_axis(dpg.mvXAxis, label="Time (s)")
+							y_axis2 = dpg.add_plot_axis(dpg.mvYAxis, label="Voltage (uV)")
+
+							# series belong to a y axis
+							series2 =  dpg.add_line_series(list(range(10)), list(np.ones(10)), parent=y_axis2)
+							dpg.set_axis_limits(y_axis2, y_min, y_max)
+							dpg.set_axis_limits(x_axis2, -5, 0)
+					with dpg.group(horizontal=True):
+						with dpg.plot(label='Player 1 - Foucs Metric', width=width, height=height, anti_aliased=True) as plt3:
+							# optionally create legend
+							dpg.add_plot_legend()
+
+							# REQUIRED: create x and y axes
+							x_axis3 = dpg.add_plot_axis(dpg.mvXAxis, label="Time (s)")
+							y_axis3 = dpg.add_plot_axis(dpg.mvYAxis, label="Metric")
+
+							# series belong to a y axis
+							series3 = dpg.add_line_series(list(range(10)), list(np.ones(10)), parent=y_axis3)
+							dpg.set_axis_limits(y_axis3, -0.005, 1.005)
+							dpg.set_axis_limits(x_axis3, -5, 0)
+						
+						with dpg.plot(label='Player 2 - Focus Metric', width=width, height=height, anti_aliased=True) as plt4:
+							# optionally create legend
+							dpg.add_plot_legend()
+
+							# REQUIRED: create x and y axes
+							x_axis4 = dpg.add_plot_axis(dpg.mvXAxis, label="Time (s)")
+							y_axis4 = dpg.add_plot_axis(dpg.mvYAxis, label="Metric")
+
+							# series belong to a y axis
+							series4 = dpg.add_line_series(list(range(10)), list(np.ones(10)), parent=y_axis4)
+							dpg.set_axis_limits(y_axis4, -0.005, 1.005)
+							dpg.set_axis_limits(x_axis4, -5, 0)
 
 	
 def window_resize():
@@ -223,15 +238,38 @@ def window_resize():
 			dpg.set_item_pos(p, [(w//2)*xpos[i], (h//2)*ypos[i],])
 		#dpg.set_item_height("win", h//2)
 		#dpg.set_item_width("win", w//2)
+		center_settings_window()
 
+def center_settings_window():
+
+	h = dpg.get_viewport_client_height()
+	w = dpg.get_viewport_client_width()	
+	settings_height = dpg.get_item_height("modal_id")
+	settings_width = dpg.get_item_width("modal_id")
+	xpos = w//2 - settings_width//2
+	ypos = h//2 - settings_height//2
+	print(h, w, settings_height, settings_width, xpos, ypos)
+	dpg.configure_item("modal_id", pos=(xpos, ypos))
+
+def startup_settings():
+	dpg.configure_item("modal_id", show=True, no_close=True, label="Settings", no_move=True)
+	time.sleep(0.01)
+	center_settings_window()
 	
+
+
+
+
+
+
+
 def main():
 	gui = GUI()
 
 	#------------------------
 	# Prepare dearpygui (these lines are always needed)
 	dpg.create_context()
-	#------------------------
+	#------------------------c
 
 	#dpg.show_metrics()
 	gui.create_window()
@@ -239,7 +277,7 @@ def main():
 	
 	#------------------------
 	# (these lines are always needed)
-	dpg.create_viewport(title=programName, vsync=False, resizable=True, width=1280, height=800)
+	dpg.create_viewport(title=programName, vsync=True, resizable=True, width=1280, height=800)
 	# must be called before showing viewport
 	#pg.set_viewport_small_icon("path/to/icon.ico")
 	#dpg.set_viewport_large_icon("path/to/icon.ico")
@@ -251,6 +289,14 @@ def main():
 	dpg.set_primary_window("Time Series", True)
 
 	dpg.set_viewport_resize_callback(callback=window_resize)
+
+	dpg.set_frame_callback(frame=1, callback=startup_settings)
+
+	# Set handler for fullscreen toggle on the F11-key.
+	with dpg.handler_registry():
+		dpg.add_key_press_handler(key=dpg.mvKey_F11, callback=dpg.toggle_viewport_fullscreen)
+
+
 	
 
 	#dpg.maximize_viewport()

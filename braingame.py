@@ -250,9 +250,9 @@ class Action:
 		return actions
 
 	def _decide(self, quantity: dict[str, Any], threshold: int=0.5):
-		_, focus = quantity['focus_metric']
-		metric = focus[-1] # TODO: Implement smarter selection than this.
-		if metric < threshold:
+		_, metric_series = quantity['focus_metric']
+		metric_val = metric_series[-1] # TODO: Implement smarter selection than this.
+		if metric_val < threshold:
 			return 0
 		else:
 			return 1
@@ -351,7 +351,7 @@ class BrainGameInterface:
 			if not self.__has_settings_changed():
 				logging.info("No new settings to apply")
 				return
-			# Stop the session if board is already running.
+			# Stop the session if board is already running. # TODO: IS THIS CORRECT?
 			if self.board_shim.is_prepared():
 				logging.info('Releasing board shim')
 				self.board_shim.release_session()
@@ -423,11 +423,6 @@ class BrainGameInterface:
 			# Start streaming session.
 			self.board_shim.start_stream(450000, self.streamer_params)
 			
-			# Add delay for synthetic board, too fast otherwise.
-			if self.board_shim.board_id == BoardIds.SYNTHETIC_BOARD:
-				#time.sleep(0.5)
-				pass
-
 			# On init setup or when settings are new, create the game logic.
 			if self.game is None or self.new_settings:
 				if self.previous_data is not None:
