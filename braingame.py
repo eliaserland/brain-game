@@ -11,7 +11,7 @@ from brainflow.data_filter import DataFilter, FilterTypes, AggOperations, NoiseT
 from brainflow.ml_model import BrainFlowMetrics, BrainFlowClassifiers, BrainFlowModelParams, MLModel
 from numpy.lib.function_base import append
 
-from main import DataContainer
+from datacontainer import DataContainer
 
 WINDOW_SIZE = 5 # Seconds
 
