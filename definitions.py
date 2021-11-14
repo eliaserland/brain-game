@@ -42,6 +42,20 @@ item_id = {
 	},
 	"combos": {
 		"board_id": dpg.generate_uuid()
+	},
+	"text": {
+		"title": dpg.generate_uuid(),
+		"tagline": dpg.generate_uuid(),
+		"enter_key": dpg.generate_uuid(),
+		"copyright": dpg.generate_uuid(),
+		"help": dpg.generate_uuid(),
+	},
+	"registry": {
+		"enter_key": dpg.generate_uuid(),
+		"game_key_binds": dpg.generate_uuid(),
+	},
+	"handlers": {
+		"enter_key": dpg.generate_uuid(),
 	}
 }
 

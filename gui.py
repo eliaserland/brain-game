@@ -11,6 +11,9 @@ from datacontainer import DataContainer
 from definitions import item_id
 from util import FPS, serial_ports
 from dpg_util import *
+import fonts
+
+toggle_state = False
 
 class GUI:
 	def __init__(self) -> None:
@@ -28,50 +31,79 @@ class GUI:
 		dpg.set_viewport_resize_callback(callback=self.window_resize) # On window resize.
 		dpg.set_exit_callback(callback=self.callback_stop_game) # On main window exit.
 
-		# Primary window
-		dpg.set_primary_window(item_id['windows']['main_window'], True)
-
-		# Font registry
-		with dpg.font_registry():
-			default_font = dpg.add_font("fonts/Roboto-Regular.ttf", 20)
-			#second_font = dpg.add_font("Resources/Roboto/Roboto-Medium.ttf", 18)
-		dpg.bind_font(default_font)
-
-		# Fullscreen toggle on F11-key and fullscreen exit on Escape-key.
+		# Fullscreen toggle on F11 and mouse double click, fullscreen exit on escape-key.
 		with dpg.handler_registry():
-			dpg.add_key_press_handler(key=dpg.mvKey_F11, callback=toggle_viewport_fullscreen)
 			dpg.add_key_press_handler(key=dpg.mvKey_Escape, callback=exit_viewport_fullscreen)
+			dpg.add_key_press_handler(key=dpg.mvKey_F11, callback=toggle_viewport_fullscreen)
+			dpg.add_mouse_double_click_handler(callback=toggle_viewport_fullscreen)
+
+		# Set welcome screen as primary window
+		dpg.set_primary_window(item_id['windows']['welcome_window'], True)
+
 
 	def create_welcome_window(self):
-		with dpg.window(tag=item_id['windows']['welcome_window'], show=True):
-			dpg.add_text("Hello!")
+		"""Create the initial welcome screen."""
+		with dpg.window(tag=item_id['windows']['welcome_window'], show=True, no_background=True):
+			# Create text items.
+			dpg.add_text("BrainGame Curiosum", tag=item_id['text']['title'])
+			dpg.add_text("This is a tagline", tag=item_id['text']['tagline'])
+			dpg.add_text("PRESS ENTER TO START", tag=item_id['text']['enter_key'])
+			dpg.add_text("Copyright by Name1, Name2, Name3, Name4, Name5 & Name6", tag=item_id['text']['copyright'])
+		# Set fonts.
+		dpg.bind_item_font(item_id['text']['title'], fonts.huge_font)
+		dpg.bind_item_font(item_id['text']['tagline'], fonts.large_font)
+		dpg.bind_item_font(item_id['text']['enter_key'], fonts.large_font)
+		dpg.bind_item_font(item_id['text']['copyright'], fonts.default_font)
+
+		# Enter-key to enter the game.
+		with dpg.handler_registry(tag=item_id['registry']['enter_key']):
+			dpg.add_key_press_handler(key=dpg.mvKey_Return, callback=self.callback_press_enter_key)
+
+		# Make "Press enter to start game" clickable to enter game.
+		with dpg.item_handler_registry(tag=item_id['handlers']['enter_key']):
+			dpg.add_item_clicked_handler(callback=self.callback_press_enter_key)
+		dpg.bind_item_handler_registry(item_id['text']['enter_key'], item_id['handlers']['enter_key'])
 
 
+	def callback_press_enter_key(self):
+		"""Enter the game from the welcome screen."""
+		dpg.configure_item(item_id['windows']['welcome_window'], show=False)
+		dpg.set_primary_window(item_id['windows']['main_window'], True)
+		dpg.configure_item(item_id['windows']['main_window'], show=True)
+		dpg.configure_item(item_id['registry']['enter_key'], show=False)
+		dpg.configure_item(item_id['registry']['game_key_binds'], show=True)
+		
+	
+	def callback_exit_game(self):
+		"""Return to the welcome screen from within the game."""
+		# TODO: Need to safely exit the game.
+
+		dpg.configure_item(item_id['registry']['game_key_binds'], show=False)
+		dpg.configure_item(item_id['windows']['main_window'], show=False)
+		dpg.set_primary_window(item_id['windows']['welcome_window'], True)
+		dpg.configure_item(item_id['windows']['welcome_window'], show=True)
+		dpg.configure_item(item_id['registry']['enter_key'], show=True)
 
 	def create_settings_menu(self):
 		"""Create the settings menu."""
-
 		def callback_boardid_combo():
 			# Retrieve and parse board ID string, and send to boardshim.
 			board_name = dpg.get_value(item_id['combos']['board_id'])
 			board_id = BoardIds.__getitem__(board_name).value
 			self.game.callback_set_board_id(board_id)
-		
 		def callback_ok():
 			# Let boardshim apply settings and show main window.
 			self.game.callback_apply_settings()
 			dpg.configure_item(item_id['windows']['settings_window'], show=False)
-		
 		def callback_reset():
 			# Let boardshim discard any new settings and reset window items.
 			dpg.set_value(item_id['combos']['board_id'], value=BoardIds._member_names_[2])
 			self.game.callback_discard_settings()
-
 		def callback_cancel():
 			# Let boardshim discard any new settings and show main window.
 			callback_reset()
 			dpg.configure_item(item_id['windows']['settings_window'], show=False)
-		
+
 		# Settings window.
 		with dpg.popup(item_id['buttons']['settings'], mousebutton=dpg.mvMouseButton_Left, modal=True, tag=item_id['windows']['settings_window']):
 			
@@ -91,8 +123,21 @@ class GUI:
 
 	def create_main_window(self):
 		"""Create the main window. """
+
+		def toggle_start_stop_game():
+			global toggle_state
+			toggle_state = not toggle_state
+			if toggle_state:
+				self.callback_start_game()
+			else:
+				self.callback_stop_game()
+
+		# Game start/stop toggle on enter-key and spacebar.
+		with dpg.handler_registry(tag=item_id['registry']['game_key_binds'], show=False):
+			dpg.add_key_press_handler(key=dpg.mvKey_Return, callback=toggle_start_stop_game)
+			dpg.add_key_press_handler(key=dpg.mvKey_Spacebar, callback=toggle_start_stop_game)
 		
-		with dpg.window(tag=item_id['windows']['main_window']):
+		with dpg.window(tag=item_id['windows']['main_window'], show=False):
 			with dpg.group(horizontal=True):
 				# Left column:
 				with dpg.child_window(width=116):
@@ -101,8 +146,8 @@ class GUI:
 					dpg.add_button(label="Start", width=btn_width, tag=item_id['buttons']['start'], callback=self.callback_start_game,)
 					dpg.add_button(label="Stop", width=btn_width, tag=item_id['buttons']['stop'], callback=self.callback_stop_game)
 					dpg.add_button(label="Settings", width=btn_width, tag=item_id['buttons']['settings'])
-
-					# Settings menu
+					dpg.add_button(label="Exit", width=btn_width, tag=item_id['buttons']['exit'], callback=self.callback_exit_game)
+					# Settings menutitle_width
 					self.create_settings_menu()
 				
 				# Right plotting window: 
@@ -171,31 +216,63 @@ class GUI:
 
 	
 	def window_resize(self):
-			xpos = [0, 0, 1, 1]
-			ypos = [0, 1, 0, 1]
-			#btn_height = dpg.get_item_height(btn1)
-			#h = dpg.get_item_height("Time Series") - btn_height - 45
-			h = dpg.get_viewport_client_height() - 45
-			#w = dpg.get_item_width("Time Series") - 40
-			w = dpg.get_viewport_client_width() - 40
-			for i, p in enumerate(item_id['plots'].values()):
-				dpg.set_item_height(p, height=h//2)
-				dpg.set_item_width(p, width=w//2)
-				dpg.set_item_pos(p, [(w//2)*xpos[i], (h//2)*ypos[i],])
-			self.center_settings_window()
+		"""Callback on window resize."""
+		xpos = [0, 0, 1, 1]
+		ypos = [0, 1, 0, 1]
+		#btn_height = dpg.get_item_height(btn1)
+		#h = dpg.get_item_height("Time Series") - btn_height - 45
+		h = dpg.get_viewport_client_height() - 45
+		#w = dpg.get_item_width("Time Series") - 40
+		w = dpg.get_viewport_client_width() - 40
+		for i, p in enumerate(item_id['plots'].values()):
+			dpg.set_item_height(p, height=h//2)
+			dpg.set_item_width(p, width=w//2)
+			dpg.set_item_pos(p, [(w//2)*xpos[i], (h//2)*ypos[i],])
+		
+		self.center_settings_window()
+		self.resize_welcome_window()
 
 	def center_settings_window(self):
+		"""Center the settings window in the viewport."""
 		h = dpg.get_viewport_client_height()
 		w = dpg.get_viewport_client_width()	
 		settings_height = dpg.get_item_height(item_id['windows']['settings_window'])
 		settings_width = dpg.get_item_width(item_id['windows']['settings_window'])
 		xpos = w//2 - settings_width//2
 		ypos = h//2 - settings_height//2
-		print(h, w, settings_height, settings_width, xpos, ypos)
+		#print(h, w, settings_height, settings_width, xpos, ypos)
 		dpg.configure_item(item_id['windows']['settings_window'], pos=(xpos, ypos))
 
+	def resize_welcome_window(self):
+		h = dpg.get_viewport_client_height()
+		w = dpg.get_viewport_client_width()
+
+		# Title
+		title_width = dpg.get_item_width(item_id['text']['title'])
+		title_xpos = w//2 - 325
+		title_ypos = int(0.15*h)
+		dpg.set_item_pos(item_id['text']['title'], (title_xpos, title_ypos))
+
+		# Tagline
+		tagline_xpos = w//2 - 120
+		tagline_ypos = title_ypos + 90
+		dpg.set_item_pos(item_id['text']['tagline'], (tagline_xpos, tagline_ypos))
+
+		# Press enter to start
+		enter_xpos = w//2 - 190
+		enter_ypos = int(np.maximum(tagline_ypos + 100, 0.6*h)) 
+		dpg.set_item_pos(item_id['text']['enter_key'], (enter_xpos, enter_ypos))
+
+		# Copyright
+		copy_xpos = w//2 - 235
+		copy_ypos = h - 50 #int(np.maximum(tagline_ypos + 100, 0.6*h)) 
+		dpg.set_item_pos(item_id['text']['copyright'], (copy_xpos, copy_ypos))
+
+
 	def startup_settings(self):
-		dpg.configure_item(item_id['windows']['settings_window'], show=True, no_close=True, label="Settings", no_move=True)
+		"""This function is executed on render of the very first frame."""
+		# Make settings window show on startup.
+		dpg.configure_item(item_id['windows']['settings_window'], show=False, no_close=True, label="Settings", no_move=True)
 		time.sleep(0.01)
 		self.center_settings_window()
 	
@@ -236,9 +313,6 @@ class GUI:
 		pass
 
 	def callback_settings_menu(self):
-		pass
-
-	def callback_press_any_key(self):
 		pass
 
 	def callback_timeseries_settings(self):
