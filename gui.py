@@ -9,8 +9,8 @@ from brainflow.board_shim import BoardIds
 import braingame
 from datacontainer import DataContainer
 from definitions import item_id
-from util import FPS
-
+from util import FPS, serial_ports
+from dpg_util import *
 
 class GUI:
 	def __init__(self) -> None:
@@ -18,85 +18,29 @@ class GUI:
 		self.game = braingame.BrainGameInterface()
 		self.game_is_running = False
 
-	def callback_start_game(self):
-		"""Callback to start a new game."""
-		if not self.game_is_running:
-			try:
-				logging.info("Starting game")
-				# Set flag.
-				self.game_is_running = True
-				# Create a container used for housing return data from game loop.
-				self.data = DataContainer()
-				# Start the main game loop.
-				self.game.start_game(self.data)
-				# Set flag & start gui plotting thread
-				self.game_is_running = True
-				self.thread = threading.Thread(target=self.__gui_loop, daemon=False)
-				self.thread.start()
-			except BaseException:
-				logging.warning('Exception', exc_info=True)
-		else:
-			logging.info("Game is already running")
-
-	def callback_stop_game(self):
-		"""Callback to stop and end a running game."""
-		if self.game_is_running:
-			logging.info("Stopping game")
-			self.game_is_running = False
-			self.game.stop_game()
-			self.data.destroy()
-			self.thread.join()
-		else:
-			logging.info("No game is running")
-
-	def callback_restart_game(self):
-		pass
-
-	def callback_settings_menu(self):
-		pass
-
-	def callback_press_any_key(self):
-		pass
-
-	def callback_timeseries_settings(self):
-		pass
-
-	def callback_focus_settings(self):
-		pass
-
-	def callback_language_setting(self):
-		pass
-
-	def __gui_loop(self):
-		"""Main thread function for updating the GUI plots during a game."""
-		fps_timer = FPS()
-		while self.game_is_running:
-			# Get data from game logic, update graphs.
-			return_data = self.data.get()
-			self.__update_plots(return_data)
-			# Print fps counter
-			fps = fps_timer.calc()
-			print(f"FPS: {fps:.3f}", end='\r')
-	
-	def __update_plots(self, data):
-			(player1, player2), actions = data
-			time1, timeseries1 = player1['time_series']
-			time2, timeseries2 = player2['time_series']
-			metric_time1, metric1 = player1['focus_metric']
-			metric_time2, metric2 = player2['focus_metric']
-
-			#print("Actions: " + ' '.join(actions) + f"  {metric1[-1]:.5f} {metric2[-1]:.5f}", end='\r')
-			dpg.set_value(item_id['line_series']['timeseries1'], [list(time1), list(timeseries1)])
-			dpg.set_value(item_id['line_series']['timeseries2'], [list(time2), list(timeseries2)])
-			dpg.set_value(item_id['line_series']['metric1'], [list(metric_time1), list(metric1)])
-			dpg.set_value(item_id['line_series']['metric2'], [list(metric_time2), list(metric2)])
-
-
 	def create_all_windows(self):
+		# Init windows
 		self.create_welcome_window()
 		self.create_main_window()
 
-		dpg.set_exit_callback(callback=self.callback_stop_game)
+		# Global callbacks
+		dpg.set_frame_callback(frame=1, callback=self.startup_settings) # Runs on first frame.
+		dpg.set_viewport_resize_callback(callback=self.window_resize) # On window resize.
+		dpg.set_exit_callback(callback=self.callback_stop_game) # On main window exit.
+
+		# Primary window
+		dpg.set_primary_window(item_id['windows']['main_window'], True)
+
+		# Font registry
+		with dpg.font_registry():
+			default_font = dpg.add_font("fonts/Roboto-Regular.ttf", 20)
+			#second_font = dpg.add_font("Resources/Roboto/Roboto-Medium.ttf", 18)
+		dpg.bind_font(default_font)
+
+		# Fullscreen toggle on F11-key and fullscreen exit on Escape-key.
+		with dpg.handler_registry():
+			dpg.add_key_press_handler(key=dpg.mvKey_F11, callback=toggle_viewport_fullscreen)
+			dpg.add_key_press_handler(key=dpg.mvKey_Escape, callback=exit_viewport_fullscreen)
 
 	def create_welcome_window(self):
 		with dpg.window(tag=item_id['windows']['welcome_window'], show=True):
@@ -255,6 +199,80 @@ class GUI:
 		time.sleep(0.01)
 		self.center_settings_window()
 	
+	#----------------------------------------------------------------------
+
+	def callback_start_game(self):
+		"""Callback to start a new game."""
+		if not self.game_is_running:
+			try:
+				logging.info("Starting game")
+				# Set flag.
+				self.game_is_running = True
+				# Create a container used for housing return data from game loop.
+				self.data = DataContainer()
+				# Start the main game loop.
+				self.game.start_game(self.data)
+				# Set flag & start gui plotting thread
+				self.game_is_running = True
+				self.thread = threading.Thread(target=self.__gui_loop, daemon=False)
+				self.thread.start()
+			except BaseException:
+				logging.warning('Exception', exc_info=True)
+		else:
+			logging.info("Game is already running")
+
+	def callback_stop_game(self):
+		"""Callback to stop and end a running game."""
+		if self.game_is_running:
+			logging.info("Stopping game")
+			self.game_is_running = False
+			self.game.stop_game()
+			self.data.destroy()
+			self.thread.join()
+		else:
+			logging.info("No game is running")
+
+	def callback_restart_game(self):
+		pass
+
+	def callback_settings_menu(self):
+		pass
+
+	def callback_press_any_key(self):
+		pass
+
+	def callback_timeseries_settings(self):
+		pass
+
+	def callback_focus_settings(self):
+		pass
+
+	def callback_language_setting(self):
+		pass
+
+	def __gui_loop(self):
+		"""Main thread function for updating the GUI plots during a game."""
+		fps_timer = FPS()
+		while self.game_is_running:
+			# Get data from game logic, update graphs.
+			return_data = self.data.get()
+			self.__update_plots(return_data)
+			# Print fps counter
+			fps = fps_timer.calc()
+			print(f"FPS: {fps:.3f}", end='\r')
+	
+	def __update_plots(self, data):
+			(player1, player2), actions = data
+			time1, timeseries1 = player1['time_series']
+			time2, timeseries2 = player2['time_series']
+			metric_time1, metric1 = player1['focus_metric']
+			metric_time2, metric2 = player2['focus_metric']
+
+			#print("Actions: " + ' '.join(actions) + f"  {metric1[-1]:.5f} {metric2[-1]:.5f}", end='\r')
+			dpg.set_value(item_id['line_series']['timeseries1'], [list(time1), list(timeseries1)])
+			dpg.set_value(item_id['line_series']['timeseries2'], [list(time2), list(timeseries2)])
+			dpg.set_value(item_id['line_series']['metric1'], [list(metric_time1), list(metric1)])
+			dpg.set_value(item_id['line_series']['metric2'], [list(metric_time2), list(metric2)])
 
 
 
