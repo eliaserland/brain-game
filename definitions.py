@@ -7,7 +7,7 @@ item_id = {
 		"main_window": dpg.generate_uuid(),
 		"welcome_window": dpg.generate_uuid(),
 		"settings_window": dpg.generate_uuid(),
-		"loading_window": dpg.generate_uuid()
+		"loading_screen": dpg.generate_uuid()
 	},
 	"plots": {
 		"timeseries1": dpg.generate_uuid(),
@@ -38,7 +38,8 @@ item_id = {
 		"settings": dpg.generate_uuid(),
 		"ok": dpg.generate_uuid(),
 		"reset": dpg.generate_uuid(),
-		"cancel": dpg.generate_uuid()
+		"cancel": dpg.generate_uuid(),
+		"loading": dpg.generate_uuid()
 	},
 	"combos": {
 		"board_id": dpg.generate_uuid()
@@ -49,6 +50,7 @@ item_id = {
 		"enter_key": dpg.generate_uuid(),
 		"copyright": dpg.generate_uuid(),
 		"help": dpg.generate_uuid(),
+		"loading": dpg.generate_uuid(),
 	},
 	"registry": {
 		"enter_key": dpg.generate_uuid(),
@@ -56,6 +58,12 @@ item_id = {
 	},
 	"handlers": {
 		"enter_key": dpg.generate_uuid(),
+	},
+	"theme": {
+		"disabled": dpg.generate_uuid(),
+	},
+	"indicator": {
+		"settings_loading": dpg.generate_uuid(),
 	}
 }
 

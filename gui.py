@@ -20,11 +20,13 @@ class GUI:
 		# Create an instance of the main game.
 		self.game = braingame.BrainGameInterface()
 		self.game_is_running = False
+		self.settings_are_applied = False
 
 	def create_all_windows(self):
 		# Init windows
-		self.create_welcome_window()
-		self.create_main_window()
+		self.__create_welcome_window()
+		self.__create_main_window()
+		self.__create_loading_screen()
 
 		# Global callbacks
 		dpg.set_frame_callback(frame=1, callback=self.startup_settings) # Runs on first frame.
@@ -41,7 +43,7 @@ class GUI:
 		dpg.set_primary_window(item_id['windows']['welcome_window'], True)
 
 
-	def create_welcome_window(self):
+	def __create_welcome_window(self):
 		"""Create the initial welcome screen."""
 		with dpg.window(tag=item_id['windows']['welcome_window'], show=True, no_background=True):
 			# Create text items.
@@ -64,14 +66,38 @@ class GUI:
 			dpg.add_item_clicked_handler(callback=self.callback_press_enter_key)
 		dpg.bind_item_handler_registry(item_id['text']['enter_key'], item_id['handlers']['enter_key'])
 
+	def __create_loading_screen(self):
+		"""Create the loading screen."""
+		with dpg.window(tag=item_id['windows']['loading_screen'], height=0, width=375, show=False, no_resize=True, 
+		                no_close=False, no_move=True, no_title_bar=True, modal=True):
+			dpg.add_loading_indicator(tag=item_id['indicator']['settings_loading'], pos=(20, 19))
+			dpg.add_text("Applying settings...", pos=(95, 35), tag=item_id['text']['loading'])
+	
 
 	def callback_press_enter_key(self):
 		"""Enter the game from the welcome screen."""
-		dpg.configure_item(item_id['windows']['welcome_window'], show=False)
-		dpg.set_primary_window(item_id['windows']['main_window'], True)
-		dpg.configure_item(item_id['windows']['main_window'], show=True)
+		# Change key-binds.
 		dpg.configure_item(item_id['registry']['enter_key'], show=False)
 		dpg.configure_item(item_id['registry']['game_key_binds'], show=True)
+		# Hide welcome window, show main window.
+		dpg.configure_item(item_id['windows']['welcome_window'], show=False)
+		while dpg.is_item_visible(item_id['windows']['welcome_window']):
+			time.sleep(0.01)
+		
+		dpg.configure_item(item_id['windows']['main_window'], show=True)
+		dpg.set_primary_window(item_id['windows']['main_window'], True)
+		while not dpg.is_item_visible(item_id['windows']['main_window'] ):
+			pass
+		# Show settings window if no settings are applied.
+		#if True: #not self.settings_are_applied:
+		
+		time.sleep(0.05)
+		dpg.configure_item(item_id['windows']['settings_window'], show=True)
+		while not dpg.is_item_visible(item_id['windows']['settings_window'] ):
+			pass
+		time.sleep(0.05)
+		self.window_resize()
+		
 		
 	
 	def callback_exit_game(self):
@@ -84,17 +110,58 @@ class GUI:
 		dpg.configure_item(item_id['windows']['welcome_window'], show=True)
 		dpg.configure_item(item_id['registry']['enter_key'], show=True)
 
-	def create_settings_menu(self):
+	
+	def callback_settings_ok(self):
+		def __settings_success():
+			dpg.configure_item(item_id['text']['loading'], default_value="Successfully applied settings.")
+			dpg.configure_item(item_id['indicator']['settings_loading'], speed=0)
+			time.sleep(1.5)
+			dpg.configure_item(item_id['windows']['settings_window'], show=False)
+			__reset_loading_screen()
+		
+		def __settings_failure():
+			dpg.configure_item(item_id['text']['loading'], default_value="Failure applying settings.\nPlease check log for details.", pos=(95, 25))
+			dpg.configure_item(item_id['indicator']['settings_loading'], speed=0)
+			time.sleep(3)
+			__reset_loading_screen()
+			dpg.configure_item(item_id['windows']['settings_window'], show=True)
+
+		def __reset_loading_screen():
+			dpg.configure_item(item_id['windows']['loading_screen'], show=False)
+			while dpg.is_item_visible(item_id['windows']['loading_screen']):
+				time.sleep(0.001)
+			dpg.configure_item(item_id['indicator']['settings_loading'], speed=1)
+			dpg.configure_item(item_id['text']['loading'], default_value="Applying settings...", pos=(95, 37))
+
+		def __enable_cancel_button():
+			dpg.configure_item(item_id['buttons']['cancel'], enabled=True)
+			dpg.bind_item_theme(item_id['buttons']['cancel'], self.default_theme)
+
+		# Hide settings window and show loading screen.
+		dpg.configure_item(item_id['windows']['settings_window'], show=False)
+		while dpg.is_item_visible(item_id['windows']['settings_window']):
+			time.sleep(0.001)
+		dpg.configure_item(item_id['windows']['loading_screen'], show=True)
+		
+		# Let boardshim try to apply settings and retrieve status.
+		status = self.game.callback_apply_settings()
+		if status:
+			__settings_success()
+			if not self.settings_are_applied:
+				__enable_cancel_button()
+			self.settings_are_applied = True
+		else:
+			__settings_failure()
+			# TODO: MAKE SURE TO HANDLE EVENTUAL ERRORS
+
+	def __create_settings_menu(self):
 		"""Create the settings menu."""
 		def callback_boardid_combo():
 			# Retrieve and parse board ID string, and send to boardshim.
 			board_name = dpg.get_value(item_id['combos']['board_id'])
 			board_id = BoardIds.__getitem__(board_name).value
 			self.game.callback_set_board_id(board_id)
-		def callback_ok():
-			# Let boardshim apply settings and show main window.
-			self.game.callback_apply_settings()
-			dpg.configure_item(item_id['windows']['settings_window'], show=False)
+		
 		def callback_reset():
 			# Let boardshim discard any new settings and reset window items.
 			dpg.set_value(item_id['combos']['board_id'], value=BoardIds._member_names_[2])
@@ -115,13 +182,20 @@ class GUI:
 			dpg.add_spacer(height=10)
 			with dpg.group(horizontal=True):
 				btn_width = 100 
-				dpg.add_button(label="OK", callback=callback_ok, width=btn_width, tag=item_id['buttons']['ok'])
+				dpg.add_button(label="OK", callback=self.callback_settings_ok, width=btn_width, tag=item_id['buttons']['ok'])
 				dpg.add_button(label="Reset", callback=callback_reset, width=btn_width, tag=item_id['buttons']['reset'])
-				dpg.add_button(label="Cancel", callback=callback_cancel, width=btn_width, tag=item_id['buttons']['cancel'])
+				dpg.add_button(label="Cancel", callback=callback_cancel, width=btn_width, tag=item_id['buttons']['cancel'], enabled=False)
 
+				# Gray out cancel button.
+				self.default_theme = dpg.get_item_theme(item_id['buttons']['cancel'])
+				with dpg.theme(tag=item_id['theme']['disabled']):
+					with dpg.theme_component(dpg.mvButton, enabled_state=False):
+						dpg.add_theme_color(dpg.mvThemeCol_ButtonActive, (51, 51, 55))
+						dpg.add_theme_color(dpg.mvThemeCol_ButtonHovered, (51, 51, 55))
+						dpg.add_theme_color(dpg.mvThemeCol_Text, (151, 151, 151))
+				dpg.bind_item_theme(item_id['buttons']['cancel'], item_id['theme']['disabled'])
 
-
-	def create_main_window(self):
+	def __create_main_window(self):
 		"""Create the main window. """
 
 		def toggle_start_stop_game():
@@ -147,8 +221,9 @@ class GUI:
 					dpg.add_button(label="Stop", width=btn_width, tag=item_id['buttons']['stop'], callback=self.callback_stop_game)
 					dpg.add_button(label="Settings", width=btn_width, tag=item_id['buttons']['settings'])
 					dpg.add_button(label="Exit", width=btn_width, tag=item_id['buttons']['exit'], callback=self.callback_exit_game)
-					# Settings menutitle_width
-					self.create_settings_menu()
+					
+					# Settings menu
+					self.__create_settings_menu()
 				
 				# Right plotting window: 
 				with dpg.child_window(autosize_x=True):
@@ -229,43 +304,43 @@ class GUI:
 			dpg.set_item_width(p, width=w//2)
 			dpg.set_item_pos(p, [(w//2)*xpos[i], (h//2)*ypos[i],])
 		
-		self.center_settings_window()
+		self.center_windows()
 		self.resize_welcome_window()
 
-	def center_settings_window(self):
-		"""Center the settings window in the viewport."""
-		h = dpg.get_viewport_client_height()
-		w = dpg.get_viewport_client_width()	
-		settings_height = dpg.get_item_height(item_id['windows']['settings_window'])
-		settings_width = dpg.get_item_width(item_id['windows']['settings_window'])
-		xpos = w//2 - settings_width//2
-		ypos = h//2 - settings_height//2
-		#print(h, w, settings_height, settings_width, xpos, ypos)
-		dpg.configure_item(item_id['windows']['settings_window'], pos=(xpos, ypos))
-
-	def resize_welcome_window(self):
+	def center_windows(self):
+		"""Center all small windows in the viewport."""
+		# Get viewport dimensions.
 		h = dpg.get_viewport_client_height()
 		w = dpg.get_viewport_client_width()
+		# Center the settings window in the viewport
+		settings_h = dpg.get_item_height(item_id['windows']['settings_window'])
+		settings_w = dpg.get_item_width(item_id['windows']['settings_window'])
+		dpg.configure_item(item_id['windows']['settings_window'], pos=(w//2-settings_w//2, h//2-settings_h//2))
+		# Center the loading screen in the viewport
+		loading_h = dpg.get_item_height(item_id['windows']['loading_screen'])
+		loading_w = dpg.get_item_width(item_id['windows']['loading_screen'])
+		dpg.configure_item(item_id['windows']['loading_screen'], pos=(w//2-loading_w//2, h//2-loading_h//2))
 
-		# Title
+	def resize_welcome_window(self):
+		# Get viewport dimensions.
+		h = dpg.get_viewport_client_height()
+		w = dpg.get_viewport_client_width()
+		# Title position
 		title_width = dpg.get_item_width(item_id['text']['title'])
 		title_xpos = w//2 - 325
 		title_ypos = int(0.15*h)
 		dpg.set_item_pos(item_id['text']['title'], (title_xpos, title_ypos))
-
-		# Tagline
+		# Tagline position
 		tagline_xpos = w//2 - 120
 		tagline_ypos = title_ypos + 90
 		dpg.set_item_pos(item_id['text']['tagline'], (tagline_xpos, tagline_ypos))
-
-		# Press enter to start
+		# Press enter to start position
 		enter_xpos = w//2 - 190
 		enter_ypos = int(np.maximum(tagline_ypos + 100, 0.6*h)) 
 		dpg.set_item_pos(item_id['text']['enter_key'], (enter_xpos, enter_ypos))
-
-		# Copyright
+		# Copyright position
 		copy_xpos = w//2 - 235
-		copy_ypos = h - 50 #int(np.maximum(tagline_ypos + 100, 0.6*h)) 
+		copy_ypos = h - 50
 		dpg.set_item_pos(item_id['text']['copyright'], (copy_xpos, copy_ypos))
 
 
@@ -274,7 +349,7 @@ class GUI:
 		# Make settings window show on startup.
 		dpg.configure_item(item_id['windows']['settings_window'], show=False, no_close=True, label="Settings", no_move=True)
 		time.sleep(0.01)
-		self.center_settings_window()
+		self.window_resize()
 	
 	#----------------------------------------------------------------------
 
@@ -282,9 +357,7 @@ class GUI:
 		"""Callback to start a new game."""
 		if not self.game_is_running:
 			try:
-				logging.info("Starting game")
-				# Set flag.
-				self.game_is_running = True
+				logging.info("GUI: Starting game")
 				# Create a container used for housing return data from game loop.
 				self.data = DataContainer()
 				# Start the main game loop.
@@ -295,25 +368,23 @@ class GUI:
 				self.thread.start()
 			except BaseException:
 				logging.warning('Exception', exc_info=True)
+				self.game_is_running = False
+				self.callback_stop_game()
+
 		else:
-			logging.info("Game is already running")
+			logging.info("GUI: Game is already running")
 
 	def callback_stop_game(self):
 		"""Callback to stop and end a running game."""
 		if self.game_is_running:
-			logging.info("Stopping game")
+			logging.info("GUI: Stopping game")
 			self.game_is_running = False
 			self.game.stop_game()
 			self.data.destroy()
 			self.thread.join()
 		else:
-			logging.info("No game is running")
+			logging.info("GUI: No game is running")
 
-	def callback_restart_game(self):
-		pass
-
-	def callback_settings_menu(self):
-		pass
 
 	def callback_timeseries_settings(self):
 		pass

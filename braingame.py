@@ -345,40 +345,38 @@ class BrainGameInterface:
 
 	def callback_apply_settings(self):
 		"""Apply current settings to the board."""
-		# If BoardShim has been initialized before:
-		if self.board_shim is not None:
-			# Break early if there's no new settings to apply.
-			if not self.__has_settings_changed():
-				logging.info("No new settings to apply")
-				return
-			# Stop the session if board is already running. # TODO: IS THIS CORRECT?
-			if self.board_shim.is_prepared():
-				logging.info('Releasing board shim')
-				self.board_shim.release_session()
-			# Apply new settings.
-			self.board_id = self.board_id_tmp
-			self.active_channels = self.active_channels_tmp
-			self.params.serial_port = self.serial_port_tmp
+		
+		# Break early if there's no new settings to apply.
+		if self.board_shim is not None and not self.__has_settings_changed():
+			logging.info("Apply settings: No new settings to apply")
+			return True
+		# Stop the session.
+		self.stop_game()
+		# Apply new settings.
+		self.board_id = self.board_id_tmp
+		self.active_channels = self.active_channels_tmp
+		self.params.serial_port = self.serial_port_tmp
 		
 		try:
 			# Initialize BoardShim and prepare session.
-			board_shim = BoardShim(self.board_id, self.params)
-			board_shim.prepare_session()
-			logging.info('Board shim prepared')
+			print(self.board_id, self.board_id_tmp)
+			self.board_shim = BoardShim(self.board_id, self.params)
+			self.board_shim.prepare_session()
+			logging.info('Apply settings: Board shim prepared')
 
 			# Activate differential mode.
-			if board_shim.board_id == BoardIds.CYTON_BOARD:
-				set_differential_mode(board_shim, self.active_channels)
-				logging.info("Differential mode set")
+			if self.board_shim.board_id == BoardIds.CYTON_BOARD:
+				set_differential_mode(self.board_shim, self.active_channels)
+				logging.info("Applying settings: Differential mode set")
 
-			# Save BoardShim
-			self.board_shim = board_shim
-			self.new_settings = True
-			logging.info("Board shim initialized")
+			logging.info("Apply settings: Board shim initialized")
+			return True
 
 		except BaseException:
 			# Error handling.
 			logging.warning('Exception', exc_info=True)
+			self.stop_game()
+			return False
 
 	def callback_discard_settings(self):
 		"""Discard current settings."""
@@ -388,7 +386,7 @@ class BrainGameInterface:
 		logging.info("Settings discarded")
 
 	def __has_settings_changed(self):
-		"""Return true if current settings are different to old settings."""
+		"""Return true if current settings are different from old settings."""
 		if (self.board_id == self.board_id_tmp
 		    and self.active_channels == self.active_channels_tmp
 		    and self.params.serial_port == self.serial_port_tmp):
@@ -398,52 +396,53 @@ class BrainGameInterface:
 
 	def callback_set_serial_port(self, serial_port: str):
 		self.serial_port_tmp = serial_port
-		logging.info("Serial port set")
+		logging.info(f"Serial port set: serial_port={serial_port}")
 
 	def callback_set_board_id(self, board_id: int):
 		self.board_id_tmp = board_id
-		logging.info("Board ID set")
+		logging.info(f"Board ID set: board_id={board_id}")
 
 	def callback_set_active_channels(self, active_channels: list[int]):
 		self.active_channels_tmp = active_channels
-		logging.info("Active channels set")
+		logging.info(f"Active channels set: active_channels={active_channels}")
 
 	def start_game(self, return_data: DataContainer, fresh_start=True):
 		"""Start the main game."""
 		if self.game_is_running:
-			print("Game is already started")
+			print("Start game: Game is already started")
 			return
 		self.return_data = return_data
 		# Verify that a session is prepared.
 		if self.board_shim is None or not self.board_shim.is_prepared():
-			logging.info("Applying settings")
+			logging.info("Start game: Need apply settings first")
 			self.callback_apply_settings()
 			
 		try: 
 			# Start streaming session.
 			self.board_shim.start_stream(450000, self.streamer_params)
 			
-			# On init setup or when settings are new, create the game logic.
-			if self.game is None or self.new_settings:
-				if self.previous_data is not None:
-					init_data = self.previous_data
-					old_quantities = self.previous_quantities
-				else:
-					init_data = None
-					old_quantities = None
-				self.game = GameLogic(self.board_shim, self.active_channels, init_data, old_quantities)
-				self.new_settings = False
-				logging.info("Game logic created")
-			
+			# Create the game logic.
+			if self.previous_data is None or fresh_start:
+				init_data = None
+				old_quantities = None
+			else:
+				init_data = self.previous_data
+				old_quantities = self.previous_quantities
+			self.game = GameLogic(self.board_shim, self.active_channels, init_data, old_quantities)
+			logging.info("Start game: Game logic created")
+		
 			# Start threading
 			self.game_is_running = True
 			self.game_thread = threading.Thread(target=self.__game_update_loop, daemon=False)
 			self.game_thread.start()
-			logging.info("Game started")
+			logging.info("Start game: Game started")
 
 		except BaseException: 
 			# Error handling.
 			logging.warning('Exception', exc_info=True)
+			self.stop_game()
+			raise Exception("Could not start game logic loop")
+			
 
 	def __game_update_loop(self):
 		"""Main thread function for game logic loop."""
@@ -484,17 +483,19 @@ class BrainGameInterface:
 			self.game_is_running = False
 			# Join Thread.
 			self.game_thread.join()
-			logging.info("Game stopped")
+			logging.info("Stop game: Game logic stopped")
 			# Clean up game logic
 			self.game.destroy()
 			self.game = None
-			logging.info("Game logic destroyed")
+			logging.info("Stop game: Game logic destroyed")
 		else:
-			logging.info("No game is running")
+			logging.info("Stop game: No game is running")
 			
 		# Clean up board shim.
-		if self.board_shim is not None and self.board_shim.is_prepared():
-			self.board_shim.release_session()
+		if self.board_shim is not None:
+			if self.board_shim.is_prepared():
+				self.board_shim.release_session()
+				logging.info('Stop game: Board shim released')
 			self.board_shim = None
-			logging.info('Board shim released')
+			
 		
