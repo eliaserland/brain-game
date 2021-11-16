@@ -126,7 +126,7 @@ class Graph:
 		self.avg_band_power.append(avg)
 		self.count = 0
 		self.lastcount = 0
-		self.old_peaks = []
+		self.old_peaks = [[],[]]
 		self.position_1 = 0
 		self.position_2 = 0
 		# Allocate deques for each player metric.
@@ -486,52 +486,62 @@ class Graph:
 		#for i in range(self.num_players):
 		#	print(f' player_{names[i]} = {self.current_metrics[i]:.3f}', end='')
 		#print('', end='\r')
-		self.lastcount = self.count
-		x = self.metrics[0]
-		peaks, _ = find_peaks(x, height=0.950, width = 50)
+		#n = self.num_points
 
-		print("--------------------")
-		for peak in peaks:
-			if self.old_peaks:
-				print("peaks = ",peaks)
-				t = self.data[self.timestamp_channel, peak]
-				print("t = ",t)
+		# for every player
+		for i in range(self.num_players):
+			x = self.metrics[i]
+			peaks, _ = find_peaks(x, height=0.950, width = 70)
 
-				comparison = np.abs(t - np.array(self.old_peaks))
-				#print("HEJ = ",np.array(self.old_peaks))
-				#print("Comparison = ", comparison)
-				min_dt = np.min(comparison)
-				#print("min_dt = ", min_dt)
-				#print(min_dt, end='')
-				#print(15/self.sampling_rate, end='')
+			# For every peak
+			for peak in peaks:
+				if self.old_peaks[i]:
+					t = self.metric_times[i][peak]
+					comparison = np.abs(t - np.array(self.old_peaks[i]))
+					min_dt = np.min(comparison)
 
-				#idx = np.argmin(comparison)
-				if min_dt < 15/self.sampling_rate:
+					if min_dt < 15/self.sampling_rate:
 
-					#SAMPLING_RATE = 250
-					#DO NOTHING GO TO NEXT PEAK
-					print("ELSA jobbar på shell")
-					#pass
-					# Samma peak som tidigare
+						#SAMPLING_RATE = 250
+						#DO NOTHING GO TO NEXT PEAK
+						#print("NO APPEND")
+						pass
+						# Samma peak som tidigare
+					else:
+					# Ny peak
+						if i == 0:
+							self.old_peaks[i].append(t)
+							print('YES APPEND')
+							if self.position_1 == 0:
+								Labyrint.turn_left(1)
+								self.position_1 = 1
+							elif self.position_1 == 1:
+								Labyrint.turn_right(1)
+								self.position_1 = 0
+						else: # SECOND PLAYER
+							self.old_peaks.append(t)
+							print('YES APPEND')
+							if self.position_2 == 0:
+								Labyrint.turn_left(2)
+								self.position_2 = 1
+							elif self.position_2 == 1:
+								Labyrint.turn_right(2)
+								self.position_2 = 0
+
+
 				else:
-				# Ny peak
-					self.old_peaks.append(t)
-					print("OLD PEAKS = ",self.old_peaks)
-				#	if self.position_1 == 0:
-					#	Labyrint.turn_left(1)
-					#	self.position_1 = 1
-					#elif self.position_1 == 1:
-					#	Labyrint.turn_right(1)
-					#	self.position_1 = 0
-
-			else:
-				self.old_peaks.append(self.data[self.timestamp_channel, peak])
-				print("OLD PEAKS OG = ",self.old_peaks)
-				#Labyrint.turn_left(1)
-				#self.position_1 = 1
-
-
-
+					if i == 0:
+						self.old_peaks[i].append(self.metric_times[i][peak])
+						#print("OLD PEAKS OG = ",self.old_peaks)
+						print("OG APPEND PLAYER ONE")
+						Labyrint.turn_right(1)
+						self.position_1 = 0
+					else:
+						self.old_peaks[i].append(self.metric_times[i][peak])
+						#print("OLD PEAKS OG = ",self.old_peaks)
+						print("OG APPEND PLAYER TWO")
+						Labyrint.turn_right(2)
+						self.position_2 = 0
 
 def smallest_power(x):
 	"""Return the smallest power of 2, smaller than or equal to x."""
