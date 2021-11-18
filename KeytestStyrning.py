@@ -16,7 +16,7 @@ class LabyrintStyrning(object):
         theta1 = 90.0;
         theta2 = 90.0;
         print("in __init__")
-        self.board = pyfirmata.Arduino('/dev/cu.usbmodem14201')
+        self.board = pyfirmata.Arduino('/dev/cu.usbmodem14101')
 
         self.board.servo_config(5, angle = self.theta1)
         self.servo1 = self.board.get_pin('d:5:s')
@@ -32,7 +32,7 @@ class LabyrintStyrning(object):
     #    self.board.exit()
 
     def turn_right(self,servomotor):
-        VinkelHoger = 50
+        VinkelHoger = 70
         startpos =int(self.servo1.read())
         #print(startpos)
         if servomotor == 1:
@@ -41,34 +41,34 @@ class LabyrintStyrning(object):
             for i in range(startpos,VinkelHoger,-1):
                 self.servo1.write(i)
                 #time.sleep(0.05)
-                self.board.pass_time(0.05)
-            #    print(self.servo1.read())
+                self.board.pass_time(0.07)
+                print(self.servo1.read())
         if servomotor == 2:
             startpos =int(self.servo2.read())
             for i in range(startpos,VinkelHoger,-1):
                 self.servo2.write(i)
-                time.sleep(0.5)
+                self.board.pass_time(0.07)
                 print(self.servo2.read())
 
             #print('right2')
 
 
     def turn_left(self,servomotor):
-        VinkelVanster = 120
+        VinkelVanster = 110
         if servomotor == 1:
             startpos =int(self.servo1.read())
             for i in range(startpos,VinkelVanster,+1):
                 self.servo1.write(i)
                 #time.sleep(0.05)
-                self.board.pass_time(0.05)
-                #print(self.servo1.read())
+                self.board.pass_time(0.07)
+                print(self.servo1.read())
 
             #print('left1')
         if servomotor == 2:
             startpos =int(self.servo2.read())
-            for i in range(startpos,VinkelVanster):
+            for i in range(startpos,VinkelVanster,+1):
                 self.servo2.write(i)
-                time.sleep(0.5)
+                self.board.pass_time(0.07)
                 print(self.servo2.read())
 
-            print('left2')
+            #print('left2')

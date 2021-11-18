@@ -6,7 +6,7 @@ import platform
 import pyfirmata
 from scipy.signal import find_peaks
 from collections import deque
-from KeytestStyrning import *
+#from KeytestStyrning import LabyrintStyrning
 #import pyqtgraph as pg
 #from pyqtgraph.Qt import QtGui, QtCore
 #import pyqtgraph.ptime as ptime
@@ -25,7 +25,7 @@ logging.getLogger('matplotlib').disabled = True
 programName = 'BrainGame Curiosum'
 fps = -1
 lastTime = time.time()
-Labyrint = LabyrintStyrning()
+#Labyrint = LabyrintStyrning()
 class BlitManager:
 	def __init__(self, canvas, animated_artists=()):
 		"""
@@ -170,7 +170,7 @@ class Graph:
 	def _init_plot(self):
 		"""Initialize the time series and associated plots."""
 		# Window limits of time series plot.
-		ylim = 200 * 1.1
+		ylim = 300 * 1.1
 		fsize = 8   # Fontsize
 		lsize = 0.8 # Line width
 
@@ -404,10 +404,13 @@ class Graph:
 	def filter_data(self, data):
 		# Only filter active channels.
 		for i, channel in enumerate(self.active_channels):
+
 			# Constant detrend, i.e. center data at y = 0
 			DataFilter.detrend(data[channel], DetrendOperations.CONSTANT.value)
 			# Notch filter, remove 50Hz AC interference.
 			DataFilter.remove_environmental_noise(data[channel], self.sampling_rate, NoiseTypes.FIFTY)
+
+
 			# Bandpass filter
 			DataFilter.perform_bandpass(data[channel], self.sampling_rate, 51.0, 100.0, 2,
 			                            FilterTypes.BUTTERWORTH.value, 0)
@@ -491,7 +494,7 @@ class Graph:
 		# for every player
 		for i in range(self.num_players):
 			x = self.metrics[i]
-			peaks, _ = find_peaks(x, height=0.950, width = 70)
+			peaks, _ = find_peaks(x, height=0.900, width = 65)
 
 			# For every peak
 			for peak in peaks:
@@ -501,31 +504,27 @@ class Graph:
 					min_dt = np.min(comparison)
 
 					if min_dt < 15/self.sampling_rate:
-
-						#SAMPLING_RATE = 250
-						#DO NOTHING GO TO NEXT PEAK
-						#print("NO APPEND")
 						pass
 						# Samma peak som tidigare
 					else:
 					# Ny peak
-						if i == 0:
+						if i == 0: # PLAYER ONE
 							self.old_peaks[i].append(t)
-							print('YES APPEND')
+							print('YES APPEND PLAYER ONE')
 							if self.position_1 == 0:
-								Labyrint.turn_left(1)
+								#Labyrint.turn_left(1)
 								self.position_1 = 1
 							elif self.position_1 == 1:
-								Labyrint.turn_right(1)
+								#Labyrint.turn_right(1)
 								self.position_1 = 0
-						else: # SECOND PLAYER
-							self.old_peaks.append(t)
-							print('YES APPEND')
+						else: # PLAYER TWO
+							self.old_peaks[i].append(t)
+							print('YES APPEND PLAYER TWO')
 							if self.position_2 == 0:
-								Labyrint.turn_left(2)
+								#Labyrint.turn_left(2)
 								self.position_2 = 1
 							elif self.position_2 == 1:
-								Labyrint.turn_right(2)
+								#Labyrint.turn_right(2)
 								self.position_2 = 0
 
 
@@ -534,13 +533,13 @@ class Graph:
 						self.old_peaks[i].append(self.metric_times[i][peak])
 						#print("OLD PEAKS OG = ",self.old_peaks)
 						print("OG APPEND PLAYER ONE")
-						Labyrint.turn_right(1)
+						#Labyrint.turn_right(1)
 						self.position_1 = 0
 					else:
 						self.old_peaks[i].append(self.metric_times[i][peak])
 						#print("OLD PEAKS OG = ",self.old_peaks)
 						print("OG APPEND PLAYER TWO")
-						Labyrint.turn_right(2)
+						#Labyrint.turn_right(2)
 						self.position_2 = 0
 
 def smallest_power(x):
