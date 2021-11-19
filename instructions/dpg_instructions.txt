@@ -1,0 +1,6 @@
+
+conda create --name braingame python=3.9.7
+conda activate braingame
+conda install pip
+python -m pip install brainflow
+pip install dearpygui
