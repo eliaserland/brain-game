@@ -1,29 +1,27 @@
 from time import sleep
 import dearpygui.dearpygui as dpg
-dpg.create_context() # Dearpygui context MUST be created before gui import.
+dpg.create_context() # Dearpygui context MUST be created before import of gui class.
 from gui import GUI
-from definitions import item_id
 from dpg_util import enter_viewport_fullscreen
 
-programName = 'BrainGame Curiosum'
+programName = 'BrainGame Curiosum' # Name displayed on top of the main window.
 
 def main():
+	# Initialize the BrainGame graphical user interface.
 	gui = GUI()
-	#dpg.show_metrics()
 	gui.create_all_windows()
-	#dpg.show_debug()
 	#------------------------
-	# (these lines are always needed)
+	# Create viewport, setup dearpygui and show viewport. (These lines are always needed)
 	dpg.create_viewport(title=programName, vsync=True, resizable=True, width=1280, height=800)
-	# must be called before showing viewport
 	#pg.set_viewport_small_icon("path/to/icon.ico")
 	#dpg.set_viewport_large_icon("path/to/icon.ico")
 	dpg.setup_dearpygui()
 	dpg.show_viewport()
 	#------------------------
+	# Start the game in fullscreen.
 	enter_viewport_fullscreen()
 	#------------------------
-	# (these lines are always needed)
+	# Start dearpygui, and destroy context after exit. (These lines are always needed)
 	dpg.start_dearpygui()
 	dpg.destroy_context()
 

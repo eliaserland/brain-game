@@ -89,6 +89,7 @@ def set_differential_mode(board_shim: BoardShim, active_channels: list[int]):
 	board_shim.config_board(''.join(ch_settings))
 
 class Board:
+	"""Base class containing BoardShim details and settings."""
 	def __init__(self, board_shim: BoardShim, active_channels: list[int]):
 		# Save board parameters.
 		self.board_shim = board_shim
@@ -105,6 +106,7 @@ class Board:
 			self.eeg_channels = [1, 2, 3, 4, 5, 6, 7, 8]
 
 class AvgBandPower(Board):
+	"""Class for calculating average band power from time series data."""
 	def __init__(self, board_shim: BoardShim, active_channels: list[int], channel: int):
 		super().__init__(board_shim, active_channels)
 		# Allocate deque for tracking average band power.
@@ -123,12 +125,14 @@ class AvgBandPower(Board):
 		return current_band_power
 
 class MLClassifier:
+	"""Simpleton class containing the BrainFlow metric classifier."""
 	model = None
 	model_params = None
 
 	@classmethod
 	def configure(cls, metric: BrainFlowMetrics=BrainFlowMetrics.RELAXATION, 
 	             classifier: BrainFlowClassifiers=BrainFlowClassifiers.REGRESSION):
+		"""Create and configure the classifier."""
 		if cls.model is not None:
 			cls.destroy_model()
 		cls.model_params = BrainFlowModelParams(metric, classifier)
@@ -139,11 +143,13 @@ class MLClassifier:
 	
 	@classmethod
 	def destroy_model(cls):
+		"""Safely destroy the classifer."""
 		cls.model.release()
 		cls.model = None
 		cls.model_params = None
 
 class FocusMetric(Board):
+	"""Class for calculating the BrainFlow focus metric from time series data."""
 	def __init__(self, board_shim: BoardShim, active_channels: list[int], channel: int, previous_metric: list, previous_time: list):
 		super().__init__(board_shim, active_channels)
 		if previous_metric is None:
@@ -164,6 +170,7 @@ class FocusMetric(Board):
 		self.channel = channel
 
 	def get_metric(self, data: np.ndarray):
+		"""From time series data, get current focus metric estimate."""
 		# Get metric estimate. 
 		bands = DataFilter.get_avg_band_powers(data, [self.channel], self.sampling_rate, True)
 		feature_vector = np.concatenate((bands[0], bands[1]))
@@ -177,18 +184,21 @@ class FocusMetric(Board):
 		return list(relative_time), list(self.metric)
 
 class TimeSeries(Board):
+	"""Class for extracting the time series data for a specific player."""
 	def __init__(self, board_shim: BoardShim, active_channels: list[int], channel: int):
 		super().__init__(board_shim, active_channels)
-		self.channel = channel
+		self.channel = channel # The channel associated with the player.
 		self.time = list(reversed(-np.arange(0, self.num_points)/self.sampling_rate))
 		self.timeseries = np.zeros(self.num_points)
 
 	def get_time_series(self, data: np.ndarray):
+		"""Get the timeseries for the given player"""
 		timeseries = data[self.channel]
 		#self.timeseries[(self.num_points-len(timeseries)):] = timeseries
-		return  self.time, list(timeseries) #list(self.timeseries)
+		return  self.time, list(timeseries)
 
 class Player:
+	"""Class collecting all player specific logic."""
 	def __init__(self, board_shim: BoardShim, active_channels: list[int], channel: int, old_playerinfo):
 		if old_playerinfo is None:
 			previous_time, previous_metric = (None, None)
@@ -199,6 +209,7 @@ class Player:
 		self.focus = FocusMetric(board_shim, active_channels, channel, previous_metric, previous_time)
 
 	def update(self, data: np.ndarray):
+		"""Update derived quantities for the current timestep."""
 		# Calculate all derived quantities, such as band power, focus metric etc.
 		time, timeseries = self.timeseries.get_time_series(data)
 		band_power  = self.bandp.get_band_power(data)
@@ -212,11 +223,12 @@ class Player:
 		return player_info
 
 class FilterData(Board):
+	"""Class responsible for filtering of the raw time series data."""
 	def __init__(self, board_shim: BoardShim, active_channels: list[int]):
 		super().__init__(board_shim, active_channels)
 
 	def filter_data(self, data: np.ndarray):
-		""""""
+		"""Apply filtering to the current timestep."""
 		# Only filter active channels.
 		for i, channel in enumerate(self.active_channels):
 			pass
@@ -238,6 +250,7 @@ class Action:
 	def __init__(self) -> None:
 		self.p1_actions = ['LEFT', 'RIGHT']
 		self.p2_actions = ['FORWARD', 'BACKWARD']
+
 
 	def perform_actions(self, quantities: list[dict[str, Any]]):
 		p1_action = self._decide(quantities[0]) # TODO: Get threshold from settings.
@@ -271,7 +284,38 @@ class Action:
 		else:
 			pass # Lower than threshold.  # TODO: implement this
 
+
+class MotorLogic:
+	def __init__(self) -> None:
+		pass
+		
+
+	def vote(self, quantities: list[dict[str, Any]]):
+		pass
+
+	def start_motor_control(self):
+		self.motors_are_running = True
+		self.motor_thread = threading.Thread(target=self.__motor_update_loop, daemon=False)
+		self.motor_thread.start()
+
+	def stop_motor_control(self):
+		self.motors_are_running = False
+		self.motor_thread.join()
+	
+	def __motor_update_loop(self):
+		"""Thread function for motor control logic."""
+		while self.motors_are_running:
+			# Wait for queue to be not empty
+
+			# Take item from queue.
+
+			# Send command to motors.
+			pass
+
+
+
 class GameLogic(Board):
+	"""Class containing and collecting the main game logic."""
 	def __init__(self, board_shim: BoardShim, active_channels: list[int], init_data: np.ndarray, old_quantities=None):
 		super().__init__(board_shim, active_channels)
 		if old_quantities is None:
@@ -286,19 +330,14 @@ class GameLogic(Board):
 			self.init_data = init_data
 		else: 
 			self.init_data = np.zeros((self.num_channels, self.num_points))
-		
-
+	
 	def update(self):
+		"""Update game logic. Equivalent to advancing game one step forwards in time."""
 		# Collect data from BCI board.
 		data = self.board_shim.get_current_board_data(self.num_points)
 
 		# Merge into init/old data array.
-		if data.shape[1] < self.num_points:
-			self.data = np.zeros_like(self.init_data)
-			self.data[:, :(self.num_points- data.shape[1])] = self.init_data[:, data.shape[1]:]
-			self.data[:, (self.num_points- data.shape[1]):] = data
-		else:
-			self.data = data
+		self.data = self.__merge_data(data)
 
 		# Filter the raw data, denoise the signal.
 		self.filter.filter_data(self.data)
@@ -314,10 +353,26 @@ class GameLogic(Board):
 		# Send derived quantities to GUI for plotting.
 		return quantities, actions, self.data
 
+	def __merge_data(self, data_in: np.ndarray):
+		"""
+		If data array is smaller than maximum allowed size, merge the new 
+		data into the array of initial/old data.
+		"""
+		if data_in.shape[1] < self.num_points:
+			data_out = np.zeros_like(self.init_data)
+			data_out[:, :(self.num_points- data_in.shape[1])] = self.init_data[:, data_in.shape[1]:]
+			data_out[:, (self.num_points- data_in.shape[1]):] = data_in
+		else:
+			data_out = data_in
+		return data_out
+
 	def destroy(self):
+		"""Safely destroy the main game logic."""
 		MLClassifier().destroy_model()
 
+
 class BrainGameInterface:
+	"""Main outwards-facing class responsible for the 'game'-side of the BrainGame."""
 	def __init__(self):
 		# Set logging level.
 		BoardShim.enable_dev_board_logger()
@@ -370,6 +425,9 @@ class BrainGameInterface:
 				logging.info("Applying settings: Differential mode set")
 
 			logging.info("Apply settings: Board shim initialized")
+			
+			# TODO: Initialize Arduino.
+			
 			return True
 
 		except BaseException:
@@ -401,7 +459,7 @@ class BrainGameInterface:
 	def callback_set_board_id(self, board_id: int):
 		self.board_id_tmp = board_id
 		logging.info(f"Board ID set: board_id={board_id}")
-
+	
 	def callback_set_active_channels(self, active_channels: list[int]):
 		self.active_channels_tmp = active_channels
 		logging.info(f"Active channels set: active_channels={active_channels}")
@@ -437,6 +495,11 @@ class BrainGameInterface:
 			self.game_thread.start()
 			logging.info("Start game: Game started")
 
+			# TODO: Start motor control loop.
+			self.motor_control = Action()
+
+
+
 		except BaseException: 
 			# Error handling.
 			logging.warning('Exception', exc_info=True)
@@ -446,34 +509,16 @@ class BrainGameInterface:
 
 	def __game_update_loop(self):
 		"""Main thread function for game logic loop."""
-		self.__init_fps()
 		while self.game_is_running:
 			# Update game logic one step, collect game info.
 			quantities, actions, data = self.game.update()
 			# Send game info to GUI for plotting.
 			self.return_data.put((quantities, actions))
-			self.__calc_fps()
-			#print(f"FPS: {self.fps:.3f}", end='\r')
 		
 		# At end, save last game state for next session.
 		self.previous_data = data
 		self.previous_quantities = quantities
 		self.previous_actions = actions
-
-	def __init_fps(self):
-		self.fps = -1
-		self.lastTime = time.time()
-	
-	def __calc_fps(self):
-		"""Calculate frames per second."""
-		now = time.time()
-		dt = now - self.lastTime
-		self.lastTime = now
-		if self.fps == -1:
-			self.fps = 1.0/dt
-		else: 
-			s = np.clip(dt*3., 0, 1)
-			self.fps = self.fps * (1-s) + (1.0/dt) * s
 
 	def stop_game(self):
 		"""Stop the main game."""
@@ -488,6 +533,9 @@ class BrainGameInterface:
 			self.game.destroy()
 			self.game = None
 			logging.info("Stop game: Game logic destroyed")
+
+			# TODO: Stop motor control loop.
+
 		else:
 			logging.info("Stop game: No game is running")
 			
