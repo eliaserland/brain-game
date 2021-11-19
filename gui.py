@@ -42,7 +42,6 @@ class GUI:
 		# Set welcome screen as primary window
 		dpg.set_primary_window(item_id['windows']['welcome_window'], True)
 
-
 	def __create_welcome_window(self):
 		"""Create the initial welcome screen."""
 		with dpg.window(tag=item_id['windows']['welcome_window'], show=True, no_background=True):
@@ -73,7 +72,6 @@ class GUI:
 			dpg.add_loading_indicator(tag=item_id['indicator']['settings_loading'], pos=(20, 19))
 			dpg.add_text("Applying settings...", pos=(95, 35), tag=item_id['text']['loading'])
 	
-
 	def callback_press_enter_key(self):
 		"""Enter the game from the welcome screen."""
 		# Change key-binds.
@@ -98,8 +96,6 @@ class GUI:
 		time.sleep(0.05)
 		self.window_resize()
 		
-		
-	
 	def callback_exit_game(self):
 		"""Return to the welcome screen from within the game."""
 		# TODO: Need to safely exit the game.
@@ -110,7 +106,6 @@ class GUI:
 		dpg.configure_item(item_id['windows']['welcome_window'], show=True)
 		dpg.configure_item(item_id['registry']['enter_key'], show=True)
 
-	
 	def callback_settings_ok(self):
 		def __settings_success():
 			dpg.configure_item(item_id['text']['loading'], default_value="Successfully applied settings.")
@@ -289,7 +284,6 @@ class GUI:
 				dpg.set_axis_limits(item_id['axes']['metric2_yaxis'], -0.005, 1.005)
 				dpg.set_axis_limits(item_id['axes']['metric2_xaxis'], -5, 0)
 
-	
 	def window_resize(self):
 		"""Callback on window resize."""
 		xpos = [0, 0, 1, 1]
@@ -342,7 +336,6 @@ class GUI:
 		copy_xpos = w//2 - 235
 		copy_ypos = h - 50
 		dpg.set_item_pos(item_id['text']['copyright'], (copy_xpos, copy_ypos))
-
 
 	def startup_settings(self):
 		"""This function is executed on render of the very first frame."""
