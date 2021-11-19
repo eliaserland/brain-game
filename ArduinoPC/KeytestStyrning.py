@@ -9,64 +9,76 @@ class LabyrintStyrning(object):
     board = None
     servo1 = None
     servo2 = None
- 
+  
 
 
     def __init__(self):
-        theta1 = 90.0; 
-        theta2 = 90.0;        
+        #Den inre ska vara servo 1 dvs pin 5
+        #Den yttre ska vara servo 2 dvs pin 6
+        self.VinkelVanster1 = 120;
+        self.VinkelVanster2 = 105;
+        self.VinkelHoger1 = 80;
+        self.VinkelHoger2 = 65;
+        #theta1 = 90.0; 
+        #theta2 = 90.0;        
         print("in __init__")
         self.board = pyfirmata.Arduino('COM3')
 
         self.board.servo_config(5, angle = self.theta1)
         self.servo1 = self.board.get_pin('d:5:s')
-        self.servo1.write(self.theta1)
+        self.servo1.write(self.VinkelVanster1)
 
         self.board.servo_config(6, angle = self.theta2)
         self.servo2 = self.board.get_pin('d:6:s')
-        self.servo2.write(self.theta2)
+        self.servo2.write(self.VinkelVanster2)
         print('Done')
     def __del__(self):
         print("Shutting down program")
-        self.goto(90, 90)
+        
         self.board.exit()
 
     def turn_right(self,servomotor):
-        VinkelHoger = 83
+        
         startpos =int(self.servo1.read())
         print(startpos)
         if servomotor == 1:
             startpos=int(self.servo1.read())
-            print('right1')
-            for i in range(startpos,VinkelHoger,-1):
+            #print('right1')
+            for i in range(startpos,self.VinkelHoger1,-1):
                 self.servo1.write(i)
-                time.sleep(0.05)
+                #time.sleep(0.05)
+                self.board.pass_time(0.05)
                 print(self.servo1.read())
         if servomotor == 2:
+            
             startpos =int(self.servo2.read())
-            for i in range(startpos,VinkelHoger,-1):
+            for i in range(startpos,self.VinkelHoger2,-1):
                 self.servo2.write(i)
-                time.sleep(0.5)
+                self.board.pass_time(0.05)
+                #time.sleep(0.5)
                 print(self.servo2.read())            
             
-            print('right2')
+            #print('right2')
      
         
     def turn_left(self,servomotor):
-        VinkelVanster = 270
+       
         if servomotor == 1:
             startpos =int(self.servo1.read())
-            for i in range(startpos,VinkelVanster,+3):
+            for i in range(startpos,self.VinkelVanster1,+1):
                 self.servo1.write(i)
-                time.sleep(0.1)
+                self.board.pass_time(0.05)
+                #time.sleep(0.1)
                 print(self.servo1.read())            
             
-            print('left1')
+            #print('left1')
         if servomotor == 2:
+           
             startpos =int(self.servo2.read())
-            for i in range(startpos,VinkelVanster):
+            for i in range(startpos,self.VinkelVanster2,+1):
                 self.servo2.write(i)
-                time.sleep(0.5)
+                self.board.pass_time(0.05)
+                #time.sleep(0.5)
                 print(self.servo2.read())                
             
-            print('left2')
+            #print('left2')
