@@ -10,7 +10,7 @@ import pyqtgraph.ptime as ptime
 
 import brainflow
 from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds, BrainFlowError
-from brainflow.data_filter import DataFilter, FilterTypes, AggOperations, WindowFunctions, DetrendOperations
+from brainflow.data_filter import DataFilter, FilterTypes, AggOperations, NoiseTypes, WindowFunctions, DetrendOperations
 
 # My stuff
 import matplotlib.pyplot as plt
@@ -20,6 +20,8 @@ pg.setConfigOption('foreground', 'k')
 
 programName = 'BrainGame Curiosum'
 time_init = time.time()
+
+from braingame import set_differential_mode
 
 fps = None
 lastTime = ptime.time()
@@ -41,7 +43,7 @@ class Graph:
 		print("NUM_POINTS = " + str(self.num_points))
 
 		# ONLY TEMP
-		self.exg_channels = [1, 2, 3, 4, 5, 6, 7, 8]
+		self.exg_channels = [1, 2]
 		
 
 		self.app = QtGui.QApplication([])
@@ -62,21 +64,22 @@ class Graph:
 		ylim = 20
 		self.plots = list()
 		self.curves = list()
-		for i in range(len(self.exg_channels)):
-			p = self.win.addPlot(row=i,col=0)
-			p.showAxis('left', True)
-			p.setMenuEnabled('left', False)
-			p.showAxis('bottom', True)
-			p.setMenuEnabled('bottom', True)
-			p.setYRange(-ylim, ylim, padding=5)
+		for j in range(2):
+			for i in range(len(self.exg_channels)):
+				p = self.win.addPlot(row=i,col=j)
+				p.showAxis('left', True)
+				p.setMenuEnabled('left', False)
+				p.showAxis('bottom', True)
+				p.setMenuEnabled('bottom', True)
+				p.setYRange(-ylim, ylim, padding=5)
 
-			p.setLabel('left', "Pot", units='uV')	
-			p.setLabel('bottom', "Time", units='s')
-			if i == 0:
-				p.setTitle('TimeSeries Plot')
-			self.plots.append(p)
-			curve = p.plot(pen=pg.mkPen('k', width=2))
-			self.curves.append(curve)
+				p.setLabel('left', "Pot", units='uV')	
+				p.setLabel('bottom', "Time", units='s')
+				if i == 0:
+					p.setTitle('TimeSeries Plot')
+				self.plots.append(p)
+				curve = p.plot(pen=pg.mkPen('k', width=2))
+				self.curves.append(curve)
 
 	def update(self):
 		global fps, lastTime
@@ -87,19 +90,31 @@ class Graph:
 		self.data[:, (self.num_points-series_len):] = board_data
 
 		avg_bands = [0, 0, 0, 0, 0]
+
 		for count, channel in enumerate(self.exg_channels):
 			# plot timeseries
-			#DataFilter.detrend(self.data[channel], DetrendOperations.CONSTANT.value)
-			#DataFilter.perform_bandpass(self.data[channel], self.sampling_rate, 51.0, 100.0, 2,
-			#						FilterTypes.BUTTERWORTH.value, 0)
-			#DataFilter.perform_bandpass(self.data[channel], self.sampling_rate, 51.0, 100.0, 2,
-			#							FilterTypes.BUTTERWORTH.value, 0)
+			#Center data
+			DataFilter.detrend(self.data[channel], DetrendOperations.CONSTANT.value)
+			
+			#Notch filter to remove AC power at 50 Hz 
+			DataFilter.remove_environmental_noise(self.data[channel], self.sampling_rate, NoiseTypes.FIFTY)
+			
+			#bandpass (freq: 2-32, order: 4 (pretty high to fully remove 100 Hz)) 
+			DataFilter.perform_bandpass(self.data[channel], self.sampling_rate, 17.0, 15.0, 4, FilterTypes.BUTTERWORTH.value, 0)
+			
+			#Lowpass-filter (cutofffreq: 35, order 4)
+			#DataFilter.perform_lowpass(self.data[channel], self.sampling_rate, 35.0, 4, FilterTypes.BUTTERWORTH.value, 0)
+			
+			#Maybe could use bandstop
 			#DataFilter.perform_bandstop(self.data[channel], self.sampling_rate, 50.0, 4.0, 2,
 			#							FilterTypes.BUTTERWORTH.value, 0)
 			#DataFilter.perform_bandstop(self.data[channel], self.sampling_rate, 60.0, 4.0, 2,
 			#							FilterTypes.BUTTERWORTH.value, 0)
-			self.curves[count].setData(self.time, self.data[channel])
-
+			
+		for i in range(2):
+			for count, channel in enumerate(self.exg_channels):
+				self.curves[count+i*2].setData(self.time, self.data[channel])
+				
 		#self.app.processEvents()
 
 		now = ptime.time()
@@ -150,6 +165,9 @@ def main():
 		# Start session.
 		board_shim = BoardShim(args.board_id, params)
 		board_shim.prepare_session()
+        
+		set_differential_mode(board_shim, [1,2])
+        
 		board_shim.start_stream(450000, args.streamer_params)
 		
 		# Start plotting.
