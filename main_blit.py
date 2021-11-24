@@ -3,11 +3,9 @@ import time
 import logging
 import numpy as np
 import platform
+import pyfirmata
+from scipy.signal import find_peaks
 from collections import deque
-
-#import pyqtgraph as pg
-#from pyqtgraph.Qt import QtGui, QtCore
-#import pyqtgraph.ptime as ptime
 
 from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds, BrainFlowError
 from brainflow.data_filter import DataFilter, FilterTypes, AggOperations, NoiseTypes, WindowFunctions, DetrendOperations
@@ -15,7 +13,7 @@ from brainflow.ml_model import BrainFlowMetrics, BrainFlowClassifiers, BrainFlow
 
 import matplotlib
 if platform.system() == 'Darwin': # Set backend for MacOS.
-	matplotlib.use('TKAgg') 
+	matplotlib.use('TKAgg')
 from matplotlib import pyplot as plt
 from matplotlib.gridspec import GridSpec
 logging.getLogger('matplotlib').disabled = True
@@ -24,6 +22,8 @@ programName = 'BrainGame Curiosum'
 fps = -1
 lastTime = time.time()
 
+from KeytestStyrning import *
+Labyrint = LabyrintStyrning()
 class BlitManager:
 	def __init__(self, canvas, animated_artists=()):
 		"""
@@ -33,7 +33,6 @@ class BlitManager:
 		The canvas to work with, this only works for sub-classes of the Agg
 		canvas which have the `~FigureCanvasAgg.copy_from_bbox` and
 		`~FigureCanvasAgg.restore_region` methods.
-
 		animated_artists : Iterable[Artist]
 		List of the artists to manage
 		"""
@@ -58,15 +57,12 @@ class BlitManager:
 	def add_artist(self, art):
 		"""
 		Add an artist to be managed.
-
 		Parameters
 		----------
 		art : Artist
-
 		The artist to be added.  Will be set to 'animated' (just
 		to be safe).  *art* must be in the figure associated with
 		the canvas this class is managing.
-
 		"""
 		if art.figure != self.canvas.figure:
 			raise RuntimeError
@@ -111,7 +107,7 @@ class Graph:
 		# Allocate arrays for data and time.
 		self.data = np.zeros((BoardShim.get_num_rows(self.board_id), self.num_points))
 		self.time = list(reversed(-np.arange(0, self.num_points)/self.sampling_rate))
-		
+
 		# Game settings.
 		self.no_gui = settings['no_gui']
 		self.game_mode = settings['game_mode']
@@ -119,14 +115,18 @@ class Graph:
 		self.active_channels = settings['active_channels']
 		if self.active_channels is None:
 			self.active_channels = self.eeg_channels
-		
+
 		# Allocate deque for tracking average band power.
 		self.avg_band_power = deque([], maxlen=100)
 		avg = list()
 		for i in range(self.num_players):
 			avg.append(np.zeros(5))
 		self.avg_band_power.append(avg)
-
+		self.count = 0
+		self.lastcount = 0
+		self.old_peaks = [[],[]]
+		self.position_1 = 0
+		self.position_2 = 0
 		# Allocate deques for each player metric.
 		self.metrics = list()
 		self.metric_times = list()
@@ -139,7 +139,7 @@ class Graph:
 		# Limit no. of channels if testing with synthetic data
 		if self.board_id == BoardIds.SYNTHETIC_BOARD:
 			self.eeg_channels = [1, 2, 3, 4, 5, 6, 7, 8]
-		
+
 		# Initialize plots
 		if not self.no_gui:
 			self._init_plot()
@@ -168,13 +168,13 @@ class Graph:
 	def _init_plot(self):
 		"""Initialize the time series and associated plots."""
 		# Window limits of time series plot.
-		ylim = 200 * 1.1
+		ylim = 500 * 1.1
 		fsize = 8   # Fontsize
 		lsize = 0.8 # Line width
 
 		# Set color cycle.
 		colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
-		
+
 		# Create a figure.
 		fig = plt.figure(constrained_layout=True, num=programName)
 
@@ -183,10 +183,10 @@ class Graph:
 		self.ln_band = list()
 		self.ln_focus = list()
 		self.barplots = list()
-		
+
 		# Set up figure according to the game mode.
 		if self.game_mode == 'analysis':
-			num_channels = len(self.eeg_channels) 
+			num_channels = len(self.eeg_channels)
 			# Set gridspec for custom subplot layout.
 			gs = GridSpec(num_channels, 2, figure=fig)
 
@@ -209,7 +209,7 @@ class Graph:
 			# Add all lines
 			for i, ax in enumerate(axes):
 				if i < num_channels: # Time series graphs.
-					(ln_tmp,) = ax.plot(self.time, self.data[self.eeg_channels[i]], 
+					(ln_tmp,) = ax.plot(self.time, self.data[self.eeg_channels[i]],
 					                    animated=True, linewidth=lsize, color=colors[i%10])
 					self.ln_timeseries.append(ln_tmp)
 					ax.set_ylim(-ylim, ylim)
@@ -218,16 +218,16 @@ class Graph:
 					if i == len(self.eeg_channels)-1:
 						ax.set_xlabel("Time (s)", fontsize=fsize)
 				elif i == num_channels: # FFT-graph.
-					(ln_tmp,) = ax.plot(self.time, self.data[self.eeg_channels[0]], 
+					(ln_tmp,) = ax.plot(self.time, self.data[self.eeg_channels[0]],
 					                    animated=True, linewidth=lsize, color=colors[i%10])
 					self.ln_ftt.append(ln_tmp) # only temp
-					#(ln_tmp,) = ax.plot([0], self.metric, animated=True, linewidth=0.8, color=colors[i%10]) # TODO: CHANGE THIS HERE 
+					#(ln_tmp,) = ax.plot([0], self.metric, animated=True, linewidth=0.8, color=colors[i%10]) # TODO: CHANGE THIS HERE
 				elif i == num_channels+1: # Avg band power.
 					barcontainer = ax.bar(list(range(5)), np.ones(5), animated=True)
 					for i, b in enumerate(barcontainer):
 						b.set_color(colors[i])
 						self.ln_band.append(b)
-						
+
 					self.barplots.append(barcontainer)
 					ax.set_yscale('log')
 					ax.set_ylim(1, 100)
@@ -246,7 +246,7 @@ class Graph:
 				ax.tick_params(axis='y', labelsize=fsize)
 
 		elif self.game_mode == 'game':
-			num_rows = 4 
+			num_rows = 4
 			num_cols = self.num_players
 			gs = GridSpec(num_rows, num_cols, figure=fig)
 			axes = []
@@ -295,7 +295,7 @@ class Graph:
 			self.num_cols = num_cols
 		else:
 			raise ValueError(f"Invalid option {self.game_mode}")
-		
+
 		# Save axis.
 		self.axes = axes
 
@@ -313,7 +313,7 @@ class Graph:
 		# Set trigger when when window is closed.
 		fig.canvas.mpl_connect('close_event', self._on_close)
 		#fig.canvas.manager.set_window_title(programName)
-	
+
 	def _on_close(self, event):
 		"""Tasks to perform on app closing event."""
 		self.running = False
@@ -367,7 +367,7 @@ class Graph:
 		if not self.no_gui:
 			# Update the artists
 			self.update_artists()
-		
+
 			# Tell the blitting manager to do its thing
 			self.bm.update()
 
@@ -406,19 +406,20 @@ class Graph:
 			DataFilter.detrend(data[channel], DetrendOperations.CONSTANT.value)
 			# Notch filter, remove 50Hz AC interference.
 			DataFilter.remove_environmental_noise(data[channel], self.sampling_rate, NoiseTypes.FIFTY)
+
 			# Bandpass filter
-			DataFilter.perform_bandpass(data[channel], self.sampling_rate, 51.0, 100.0, 2,
+			DataFilter.perform_bandpass(data[channel], self.sampling_rate, 40.0, 90.0, 2,
 			                            FilterTypes.BUTTERWORTH.value, 0)
 			#DataFilter.perform_bandpass(data[channel], self.sampling_rate, 51.0, 100.0, 2,
 			#                            FilterTypes.BUTTERWORTH.value, 0)
 			#DataFilter.perform_bandstop(data[channel], self.sampling_rate, 50.0, 4.0, 2,
 			#                            FilterTypes.BUTTERWORTH.value, 0)
-			#DataFilter.perform_bandstop(data[channel], self.sampling_rate, 60.0, 4.0, 2,
-			#                            FilterTypes.BUTTERWORTH.value, 0)
+			DataFilter.perform_bandstop(data[channel], self.sampling_rate, 100.0, 4.0, 2,
+			                            FilterTypes.BUTTERWORTH.value, 0)
 
 	def get_band_power(self, data):
 		"""
-		Calculate average band power from the time series data. 5 Bands: 
+		Calculate average band power from the time series data. 5 Bands:
 		1-4Hz, 4-8Hz, 8-13Hz, 13-30Hz, 30-50Hz.
 		"""
 		avg_bp = list()
@@ -430,7 +431,7 @@ class Graph:
 		elif self.game_mode == 'analysis':
 			avg, std = DataFilter.get_avg_band_powers(data, self.active_channels, self.sampling_rate, True)
 			avg_bp.append(avg)
-		else: 
+		else:
 			raise ValueError(f"Invalid option {self.game_mode}")
 		self.avg_band_power.append(avg_bp)
 		self.current_band_power = np.array(self.avg_band_power).mean(0)
@@ -444,7 +445,6 @@ class Graph:
 				feature_vector = np.concatenate((bands[0], bands[1]))
 				metric = self.model.predict(feature_vector)
 				self.metrics[i].append(metric)
-
 				# Get time corresponding to the metric value.
 				metric_time = data[self.timestamp_channel, -1]
 				self.metric_times[i].append(metric_time)
@@ -473,19 +473,81 @@ class Graph:
 		lastTime = now
 		if fps == -1:
 			fps = 1.0/dt
-		else: 
+		else:
 			s = np.clip(dt*3., 0, 1)
 			fps = fps * (1-s) + (1.0/dt) * s
-	
+
 	def print_info(self):
 		"""Print information to the terminal."""
 		global fps
 		names = ['one', 'two', 'three', 'four']
-		print(f" {fps:6.2f} fps, metric ({self.model_params.metric.name.lower()}):", end='')
-		for i in range(self.num_players):
-			print(f' player_{names[i]} = {self.current_metrics[i]:.3f}', end='')
-		print('', end='\r')
+		#print(f" {fps:6.2f} fps, metric ({self.model_params.metric.name.lower()}):", end='')
+		#for i in range(self.num_players):
+		#	print(f' player_{names[i]} = {self.current_metrics[i]:.3f}', end='')
+		#print('', end='\r')
+		#n = self.num_points
 
+		# for every player
+		for i in range(self.num_players):
+			x = self.metrics[i]
+			peaks, _ = find_peaks(x, height=0.90, width = 70)
+
+			# For every peak
+			for peak in peaks:
+				#print('peak: ', peak)
+				if self.old_peaks[i]:
+					t = self.metric_times[i][peak]
+					comparison = np.abs(t - np.array(self.old_peaks[i]))
+					min_dt = np.min(comparison)
+
+					#print(self.metrics[i])
+
+					if min_dt < 15/self.sampling_rate:
+						#SAMPLING_RATE = 250
+						#DO NOTHING GO TO NEXT PEAK
+						#print("NO APPEND")
+						pass
+						# Samma peak som tidigare
+					else:
+					# Ny peak
+						print('peak', peak)
+						if i == 0:
+							self.old_peaks[i].append(t)
+							print('YES APPEND P1')
+							if self.position_1 == 0:
+								print('Labyrint.turn_left(1)')
+								Labyrint.turn_left(1)
+								self.position_1 = 1
+							elif self.position_1 == 1:
+								Labyrint.turn_right(1)
+								print('Labyrint.turn_right(1)')
+								self.position_1 = 0
+						elif i == 1: # SECOND PLAYER
+							self.old_peaks[i].append(t)
+							print('YES APPEND P2')
+							if self.position_2 == 0:
+								Labyrint.turn_left(2)
+								print('Labyrint.turn_left(2)')
+								self.position_2 = 1
+							elif self.position_2 == 1:
+								Labyrint.turn_right(2)
+								print('Labyrint.turn_right(2)')
+								self.position_2 = 0
+
+
+				else:
+					if i == 0:
+						self.old_peaks[i].append(self.metric_times[i][peak])
+						#print("OLD PEAKS OG = ",self.old_peaks)
+						print("OG APPEND PLAYER ONE")
+						Labyrint.turn_right(1)
+						self.position_1 = 0
+					else:
+						self.old_peaks[i].append(self.metric_times[i][peak])
+						#print("OLD PEAKS OG = ",self.old_peaks)
+						print("OG APPEND PLAYER TWO")
+						Labyrint.turn_right(2)
+						self.position_2 = 0
 
 def smallest_power(x):
 	"""Return the smallest power of 2, smaller than or equal to x."""
@@ -496,7 +558,7 @@ def main():
 	BoardShim.enable_dev_board_logger()
 	#logging.basicConfig(level=logging.DEBUG)
 
-	# Parse command line arguments. Use docs to check which parameters are 
+	# Parse command line arguments. Use docs to check which parameters are
 	# required for specific board, e.g. for Cyton - set serial port.
 	parser = argparse.ArgumentParser()
 	# Board options:
@@ -529,7 +591,7 @@ def main():
 	params.ip_protocol = args.ip_protocol
 	params.timeout = args.timeout
 	params.file = args.file
-	
+
 	# Set active channels
 	if args.custom_channels is not None:
 		active_channels = args.custom_channels
@@ -556,7 +618,7 @@ def main():
 		# x (CHANNEL, POWER_DOWN, GAIN_SET, INPUT_TYPE_SET, BIAS_SET, SRB2_SET, SRB1_SET) X
 		# channel 1,2 "differential mode", channel 3-8 off.
 		#ch_settings = ["x1060100X", "x2060100X", "x3161000X", "x4161000X",
-		#               "x5161000X", "x6161000X", "x7161000X", "x8161000X"]		
+		#               "x5161000X", "x6161000X", "x7161000X", "x8161000X"]
 		if board_shim.board_id == BoardIds.CYTON_BOARD:
 			if settings['game_mode'] == 'game':
 				# Set active channels to "differential mode", turn off others.
@@ -564,7 +626,7 @@ def main():
 				opt_channel_on  = "060100X"
 				opt_channel_off = "161000X"
 				for i in range(1,len(BoardShim.get_eeg_channels(board_shim.board_id))+1):
-					s = f'x{i}' 
+					s = f'x{i}'
 					if i in settings['active_channels']:
 						ch_settings.append(s+opt_channel_on)
 					else:
@@ -573,16 +635,16 @@ def main():
 
 		# Start session.
 		board_shim.start_stream(450000, args.streamer_params)
-		
+
 		# Start plotting.
 		g = Graph(board_shim, settings)
-		
+
 	except BaseException as e:
 		# Error handling.
 		logging.warning('Exception', exc_info=True)
 		if g is not None:
 			g.remove_ml_model()
-	
+
 	finally:
 		# End session.
 		if g is not None:
