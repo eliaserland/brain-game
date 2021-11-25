@@ -95,19 +95,19 @@ class Graph:
 			# plot timeseries
 			#Center data
 			DataFilter.detrend(self.data[channel], DetrendOperations.CONSTANT.value)
-			
+			DataFilter.detrend(self.data[channel], DetrendOperations.LINEAR.value)
 			#Notch filter to remove AC power at 50 Hz 
 			DataFilter.remove_environmental_noise(self.data[channel], self.sampling_rate, NoiseTypes.FIFTY)
 			
 			#bandpass (freq: 2-32, order: 4 (pretty high to fully remove 100 Hz)) 
-			DataFilter.perform_bandpass(self.data[channel], self.sampling_rate, 17.0, 15.0, 4, FilterTypes.BUTTERWORTH.value, 0)
+			DataFilter.perform_bandpass(self.data[channel], self.sampling_rate, 45, 80, 2, FilterTypes.BUTTERWORTH.value, 0)
 			
 			#Lowpass-filter (cutofffreq: 35, order 4)
 			#DataFilter.perform_lowpass(self.data[channel], self.sampling_rate, 35.0, 4, FilterTypes.BUTTERWORTH.value, 0)
 			
 			#Maybe could use bandstop
-			#DataFilter.perform_bandstop(self.data[channel], self.sampling_rate, 50.0, 4.0, 2,
-			#							FilterTypes.BUTTERWORTH.value, 0)
+			#DataFilter.perform_bandstop(self.data[channel], self.sampling_rate, 100, 2.0, 2,
+										#FilterTypes.BUTTERWORTH.value, 0)
 			#DataFilter.perform_bandstop(self.data[channel], self.sampling_rate, 60.0, 4.0, 2,
 			#							FilterTypes.BUTTERWORTH.value, 0)
 			

@@ -22,8 +22,8 @@ programName = 'BrainGame Curiosum'
 fps = -1
 lastTime = time.time()
 
-from KeytestStyrning import *
-Labyrint = LabyrintStyrning()
+#from KeytestStyrning import *
+#Labyrint = LabyrintStyrning()
 class BlitManager:
 	def __init__(self, canvas, animated_artists=()):
 		"""
@@ -168,7 +168,7 @@ class Graph:
 	def _init_plot(self):
 		"""Initialize the time series and associated plots."""
 		# Window limits of time series plot.
-		ylim = 500 * 1.1
+		ylim = 100 * 1.1
 		fsize = 8   # Fontsize
 		lsize = 0.8 # Line width
 
@@ -404,6 +404,7 @@ class Graph:
 		for i, channel in enumerate(self.active_channels):
 			# Constant detrend, i.e. center data at y = 0
 			DataFilter.detrend(data[channel], DetrendOperations.CONSTANT.value)
+			DataFilter.detrend(data[channel], DetrendOperations.LINEAR.value)
 			# Notch filter, remove 50Hz AC interference.
 			DataFilter.remove_environmental_noise(data[channel], self.sampling_rate, NoiseTypes.FIFTY)
 
@@ -467,15 +468,16 @@ class Graph:
 
 	def calc_fps(self):
 		"""Calculate frames per second."""
-		global fps, lastTime
-		now = time.time()
-		dt = now - lastTime
-		lastTime = now
-		if fps == -1:
-			fps = 1.0/dt
-		else:
-			s = np.clip(dt*3., 0, 1)
-			fps = fps * (1-s) + (1.0/dt) * s
+		pass
+		#global fps, lastTime
+		#now = time.time()
+		#dt = now - lastTime
+		#lastTime = now
+		#if fps == -1:
+		#	fps = 1.0/dt
+		#else:
+		#	s = np.clip(dt*3., 0, 1)
+		#	fps = fps * (1-s) + (1.0/dt) * s
 
 	def print_info(self):
 		"""Print information to the terminal."""
@@ -516,21 +518,21 @@ class Graph:
 							print('YES APPEND P1')
 							if self.position_1 == 0:
 								print('Labyrint.turn_left(1)')
-								Labyrint.turn_left(1)
+								#Labyrint.turn_left(1)
 								self.position_1 = 1
 							elif self.position_1 == 1:
-								Labyrint.turn_right(1)
+								#Labyrint.turn_right(1)
 								print('Labyrint.turn_right(1)')
 								self.position_1 = 0
 						elif i == 1: # SECOND PLAYER
 							self.old_peaks[i].append(t)
 							print('YES APPEND P2')
 							if self.position_2 == 0:
-								Labyrint.turn_left(2)
+								#Labyrint.turn_left(2)
 								print('Labyrint.turn_left(2)')
 								self.position_2 = 1
 							elif self.position_2 == 1:
-								Labyrint.turn_right(2)
+								#Labyrint.turn_right(2)
 								print('Labyrint.turn_right(2)')
 								self.position_2 = 0
 
@@ -540,13 +542,13 @@ class Graph:
 						self.old_peaks[i].append(self.metric_times[i][peak])
 						#print("OLD PEAKS OG = ",self.old_peaks)
 						print("OG APPEND PLAYER ONE")
-						Labyrint.turn_right(1)
+						#Labyrint.turn_right(1)
 						self.position_1 = 0
 					else:
 						self.old_peaks[i].append(self.metric_times[i][peak])
 						#print("OLD PEAKS OG = ",self.old_peaks)
 						print("OG APPEND PLAYER TWO")
-						Labyrint.turn_right(2)
+						#Labyrint.turn_right(2)
 						self.position_2 = 0
 
 def smallest_power(x):
