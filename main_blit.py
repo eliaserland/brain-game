@@ -405,6 +405,7 @@ class Graph:
 			# Constant detrend, i.e. center data at y = 0
 			DataFilter.detrend(data[channel], DetrendOperations.CONSTANT.value)
 			DataFilter.detrend(data[channel], DetrendOperations.LINEAR.value)
+			DataFilter.perform_rolling_filter(self.data[channel], 3, AggOperations.MEAN.value)
 			# Notch filter, remove 50Hz AC interference.
 			DataFilter.remove_environmental_noise(data[channel], self.sampling_rate, NoiseTypes.FIFTY)
 
