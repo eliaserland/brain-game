@@ -404,6 +404,7 @@ class Graph:
 		for i, channel in enumerate(self.active_channels):
 			# Constant detrend, i.e. center data at y = 0
 			DataFilter.detrend(data[channel], DetrendOperations.CONSTANT.value)
+			DataFilter.detrend(data[channel], DetrendOperations.LINEAR.value)
 			# Notch filter, remove 50Hz AC interference.
 			DataFilter.remove_environmental_noise(data[channel], self.sampling_rate, NoiseTypes.FIFTY)
 
