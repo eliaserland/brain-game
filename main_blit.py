@@ -6,6 +6,8 @@ import platform
 import pyfirmata
 from scipy.signal import find_peaks
 from collections import deque
+from sklearn.decomposition import FastICA
+
 
 from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds, BrainFlowError
 from brainflow.data_filter import DataFilter, FilterTypes, AggOperations, NoiseTypes, WindowFunctions, DetrendOperations
@@ -168,7 +170,7 @@ class Graph:
 	def _init_plot(self):
 		"""Initialize the time series and associated plots."""
 		# Window limits of time series plot.
-		ylim = 100 * 1.1
+		ylim = 100* 1.1
 		fsize = 8   # Fontsize
 		lsize = 0.8 # Line width
 
@@ -407,14 +409,17 @@ class Graph:
 			DataFilter.detrend(data[channel], DetrendOperations.LINEAR.value)
 			# Notch filter, remove 50Hz AC interference.
 			DataFilter.remove_environmental_noise(data[channel], self.sampling_rate, NoiseTypes.FIFTY)
-
+			
 			# Bandpass filter
+			#DataFilter.perform_wavelet_denoising(self.data[channel], 'coif3', 3)
+			#DataFilter.perform_rolling_filter(data[channel], 3, AggOperations.MEDIAN.value)
+			DataFilter.perform_rolling_filter(self.data[channel], 3, AggOperations.MEAN.value)
 			DataFilter.perform_bandpass(data[channel], self.sampling_rate, 40.0, 90.0, 2,
 			                            FilterTypes.BUTTERWORTH.value, 0)
 			#DataFilter.perform_bandpass(data[channel], self.sampling_rate, 51.0, 100.0, 2,
 			#                            FilterTypes.BUTTERWORTH.value, 0)
-			#DataFilter.perform_bandstop(data[channel], self.sampling_rate, 50.0, 4.0, 2,
-			#                            FilterTypes.BUTTERWORTH.value, 0)
+			#DataFilter.perform_bandstop(data[channel], self.sampling_rate, 4, 4.0, 2,
+			#                           FilterTypes.BUTTERWORTH.value, 0)
 			DataFilter.perform_bandstop(data[channel], self.sampling_rate, 100.0, 4.0, 2,
 			                            FilterTypes.BUTTERWORTH.value, 0)
 
