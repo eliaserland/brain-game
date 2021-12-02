@@ -104,7 +104,7 @@ class Graph:
 
 			#DataFilter.perform_wavelet_denoising(self.data[channel], 'coif3', 3)
 			#Lowpass-filter (cutofffreq: 35, order 4)
-			#DataFilter.perform_lowpass(self.data[channel], self.sampling_rate, 35.0, 4, FilterTypes.BUTTERWORTH.value, 0)
+			DataFilter.perform_highpass(self.data[channel], self.sampling_rate, 0.1, 2, FilterTypes.BUTTERWORTH.value, 0)
 			DataFilter.perform_rolling_filter(self.data[channel], 3, AggOperations.MEDIAN.value)
 			#DataFilter.perform_rolling_filter(self.data[channel],5 , AggOperations.MEAN.value)
 			#Maybe could use bandstop

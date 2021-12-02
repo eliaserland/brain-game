@@ -416,6 +416,7 @@ class Graph:
 			DataFilter.perform_rolling_filter(self.data[channel], 3, AggOperations.MEAN.value)
 			DataFilter.perform_bandpass(data[channel], self.sampling_rate, 40.0, 90.0, 2,
 			                            FilterTypes.BUTTERWORTH.value, 0)
+			DataFilter.perform_highpass(self.data[channel], self.sampling_rate, 0.1, 2, FilterTypes.BUTTERWORTH.value, 0)
 			#DataFilter.perform_bandpass(data[channel], self.sampling_rate, 51.0, 100.0, 2,
 			#                            FilterTypes.BUTTERWORTH.value, 0)
 			#DataFilter.perform_bandstop(data[channel], self.sampling_rate, 4, 4.0, 2,
@@ -494,17 +495,18 @@ class Graph:
 		#print('', end='\r')
 		#n = self.num_points
 
-		# for every player
+		# Is resposible for detecting peaks in the concentration metric and 
+		#sends commands to the servos to move 
 		for i in range(self.num_players):
 			x = self.metrics[i]
-			peaks, _ = find_peaks(x, height=0.90, width = 70)
+			peaks, _ = find_peaks(x, height=0.90, width = 70) #Responsible for finding peaks in metric.
 
-			# For every peak
+			# Goes to the founds peaks and determines if it is a new peak or the same.
 			for peak in peaks:
 				#print('peak: ', peak)
 				if self.old_peaks[i]:
-					t = self.metric_times[i][peak]
-					comparison = np.abs(t - np.array(self.old_peaks[i]))
+					t = self.metric_times[i][peak]#Time where the peak was found.
+					comparison = np.abs(t - np.array(self.old_peaks[i]))# Compares the time between the new peak and old.
 					min_dt = np.min(comparison)
 
 					#print(self.metrics[i])
@@ -516,7 +518,7 @@ class Graph:
 						pass
 						# Samma peak som tidigare
 					else:
-					# Ny peak
+					# if new peak, changes the servo position.
 						print('peak', peak)
 						if i == 0:
 							self.old_peaks[i].append(t)

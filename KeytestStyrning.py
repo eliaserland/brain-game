@@ -11,13 +11,15 @@ class LabyrintStyrning(object):
     servo2 = None
   
 
+#Function that establishes the connection between the Arduino
+#and the python scripts. It also sets the start angles for the servos.
 
     def __init__(self):
         #Den inre ska vara servo 1 dvs pin 5
         #Den yttre ska vara servo 2 dvs pin 6
-        self.VinkelVanster1 =60;
-        self.VinkelVanster2 = 115;
-        self.VinkelHoger1 = 100;
+        self.VinkelVanster1 =90;
+        self.VinkelVanster2 = 125;
+        self.VinkelHoger1 = 120;
         self.VinkelHoger2 = 75;
         #theta1 = 90.0; 
         #theta2 = 90.0;        
@@ -36,6 +38,8 @@ class LabyrintStyrning(object):
         print("Shutting down program")
         
         self.board.exit()
+#Function that turns the servos to the right postion.
+#Takes the inputs 1 or 2 depending on which servo is wanted 
 
     def turn_right(self,servomotor):
         
@@ -60,7 +64,8 @@ class LabyrintStyrning(object):
             
             #print('right2')
      
-        
+    #Function that turns the servos to the left position.
+    #Takes the inputs 1 or 2 depending on which servo is wanted 
     def turn_left(self,servomotor):
        
         if servomotor == 1:
