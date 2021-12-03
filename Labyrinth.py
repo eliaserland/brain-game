@@ -6,12 +6,14 @@ class Labyrinth():
 	def __init__(self, usb_port):
 		#Establishes the connection between the Arduino and the python scripts. 
 		#It also sets the start angles for the servos.
-		#Inner servo should be servo 1, ie pin 5Den inre ska vara servo 1 dvs pin 5
-		#Outer servo should be servo 2, ie pin 6Den yttre ska vara servo 2 dvs pin 6
-		self.Angle_Left_1 =90;
-		self.Angle_Left_2 = 125;
-		self.Angle_Right_1 = 120;
-		self.Angle_Right_2 = 75;
+		#Inner servo should be servo 1, ie pin 5
+		#Outer servo should be servo 2, ie pin 6
+		self.Angle_Left_1 = 80
+		self.Angle_Right_1 = 120
+		
+		self.Angle_Left_2 = 120
+		self.Angle_Right_2 = 75
+		
 		self.usb_port = usb_port        
 		print("in __init__")
 		self.board = pyfirmata.Arduino(self.usb_port)
@@ -25,9 +27,9 @@ class Labyrinth():
 		self.servo2.write(self.Angle_Left_2)
 		print('Done initializing arduinos')
 	def __del__(self):
+		#Returns the servos to start position when object is removed or script terminated
 		print("Shutting down program, returning to start position")
 		self.turn_left(1)
-		time.sleep(0.1)
 		self.turn_left(2)
 		print("Shutting down program")
 
