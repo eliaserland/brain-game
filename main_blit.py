@@ -1,3 +1,4 @@
+#from Labyrinth import *
 import argparse
 import time
 import logging
@@ -7,6 +8,7 @@ import pyfirmata
 from scipy.signal import find_peaks
 from collections import deque
 from sklearn.decomposition import FastICA
+
 
 
 from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds, BrainFlowError
@@ -24,8 +26,7 @@ programName = 'BrainGame Curiosum'
 fps = -1
 lastTime = time.time()
 
-#from KeytestStyrning import *
-#Labyrint = LabyrintStyrning()
+
 class BlitManager:
 	def __init__(self, canvas, animated_artists=()):
 		"""
@@ -587,6 +588,9 @@ def main():
 	parser.add_argument('--game-mode', type=str, required=False, default='game', choices=['game', 'analysis'], help="Mode: Game (single-/multiplayer) or evaulation/analysis (only singleplayer).")
 	parser.add_argument('--num-players', type=int, required=False, default=2, choices=[1, 2, 3, 4], help="In game mode: Number of players.")
 	parser.add_argument('--custom_channels', type=list[int], required=False, default=None, help='In game mode: custom channels for each player. Defaults to channels 1 to num_players.')
+	#Arduino options
+	parser.add_argument('--arduino-port', type=str, required=False, default='', help='Arduinos serial port')
+
 	args = parser.parse_args()
 
 	# Set parsed parameters in BrainFlowInputParams structure.
@@ -600,6 +604,7 @@ def main():
 	params.ip_protocol = args.ip_protocol
 	params.timeout = args.timeout
 	params.file = args.file
+	
 
 	# Set active channels
 	if args.custom_channels is not None:
@@ -647,6 +652,9 @@ def main():
 
 		# Start plotting.
 		g = Graph(board_shim, settings)
+		
+		#Initialize Connection to Arduino and Servo motors
+		#Labyrint = Labyrinth(args.arduino_port)
 
 	except BaseException as e:
 		# Error handling.
