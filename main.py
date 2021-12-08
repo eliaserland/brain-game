@@ -9,7 +9,6 @@ programName = 'BrainGame Curiosum' # Name displayed on top of the main window.
 def main():
 	# Initialize the BrainGame graphical user interface.
 	gui = GUI()
-	gui.create_all_windows()
 	#------------------------
 	# Create viewport, setup dearpygui and show viewport. (These lines are always needed)
 	dpg.create_viewport(title=programName, vsync=True, resizable=True, width=1280, height=800)

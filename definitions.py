@@ -7,7 +7,8 @@ item_id = {
 		"main_window": dpg.generate_uuid(),
 		"welcome_window": dpg.generate_uuid(),
 		"settings_window": dpg.generate_uuid(),
-		"loading_screen": dpg.generate_uuid()
+		"loading_screen": dpg.generate_uuid(),
+		"help_dialogue": dpg.generate_uuid(),
 	},
 	"plots": {
 		"timeseries1": dpg.generate_uuid(),
@@ -39,7 +40,9 @@ item_id = {
 		"ok": dpg.generate_uuid(),
 		"reset": dpg.generate_uuid(),
 		"cancel": dpg.generate_uuid(),
-		"loading": dpg.generate_uuid()
+		"loading": dpg.generate_uuid(),
+		"help_open": dpg.generate_uuid(),
+		"help_close": dpg.generate_uuid(),
 	},
 	"combos": {
 		"board_id": dpg.generate_uuid()
@@ -55,9 +58,6 @@ item_id = {
 	"registry": {
 		"enter_key": dpg.generate_uuid(),
 		"game_key_binds": dpg.generate_uuid(),
-	},
-	"handlers": {
-		"enter_key": dpg.generate_uuid(),
 	},
 	"theme": {
 		"disabled": dpg.generate_uuid(),
