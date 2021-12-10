@@ -9,6 +9,7 @@ item_id = {
 		"settings_window": dpg.generate_uuid(),
 		"loading_screen": dpg.generate_uuid(),
 		"help_dialogue": dpg.generate_uuid(),
+		"child_window": dpg.generate_uuid(),
 	},
 	"plots": {
 		"timeseries1": dpg.generate_uuid(),
@@ -33,8 +34,7 @@ item_id = {
 		"metric2_xaxis": dpg.generate_uuid()
 	},
 	"buttons": {
-		"start": dpg.generate_uuid(),
-		"stop": dpg.generate_uuid(),
+		'start_stop': dpg.generate_uuid(),
 		"exit": dpg.generate_uuid(),
 		"settings": dpg.generate_uuid(),
 		"ok": dpg.generate_uuid(),
@@ -54,6 +54,8 @@ item_id = {
 		"copyright": dpg.generate_uuid(),
 		"help": dpg.generate_uuid(),
 		"loading": dpg.generate_uuid(),
+		"title_game": dpg.generate_uuid(),
+		'info_game': dpg.generate_uuid(),
 	},
 	"registry": {
 		"enter_key": dpg.generate_uuid(),
@@ -61,6 +63,8 @@ item_id = {
 	},
 	"theme": {
 		"disabled": dpg.generate_uuid(),
+		'start_green': dpg.generate_uuid(),
+		'stop_red': dpg.generate_uuid(),
 	},
 	"indicator": {
 		"settings_loading": dpg.generate_uuid(),

@@ -77,8 +77,13 @@ class GUI:
 			toggle_state = not toggle_state
 			if toggle_state:
 				self.callback_start_game()
+				dpg.configure_item(item_id['buttons']['start_stop'], label="Stop")
+				dpg.bind_item_theme(item_id['buttons']['start_stop'], item_id['theme']['stop_red'])
 			else:
 				self.callback_stop_game()
+				dpg.configure_item(item_id['buttons']['start_stop'], label="Start")
+				dpg.bind_item_theme(item_id['buttons']['start_stop'], item_id['theme']['start_green'])
+
 
 		# Key bind: Game start/stop toggle on enter-key and spacebar. Default state: deactivated.
 		with dpg.handler_registry(tag=item_id['registry']['game_key_binds'], show=False):
@@ -89,15 +94,42 @@ class GUI:
 		with dpg.window(tag=item_id['windows']['main_window'], show=False):
 			with dpg.group(horizontal=True): # Horizontal grouping.
 				# Left column: add game buttons and text items
-				with dpg.child_window(width=116):
+				col_width = 200
+				with dpg.child_window(tag=item_id['windows']['child_window'], width=col_width):
+					dpg.add_spacer(height=5)
+					dpg.add_text(' BrainGame\n Curisosum', tag=item_id['text']['title_game'])
+					info_text = "Short, fun and engaging tagline or description of the game, shorter than the help dialogue, but still useful."
+					dpg.add_spacer(height=10)
+					dpg.add_text(info_text, tag=item_id['text']['info_game'], wrap=col_width)
+					dpg.add_spacer(height=10)
 					# Main game buttons
-					btn_width = 100 
-					dpg.add_button(label="Start", width=btn_width, tag=item_id['buttons']['start'], callback=self.callback_start_game,)
-					dpg.add_button(label="Stop", width=btn_width, tag=item_id['buttons']['stop'], callback=self.callback_stop_game)
-					dpg.add_button(label="Help", width=btn_width, tag=item_id['buttons']['help_open'], callback=self.callback_show_help_dialogue)
-					dpg.add_button(label="Settings", width=btn_width, tag=item_id['buttons']['settings'], callback=self.callback_show_settings_menu)
-					dpg.add_button(label="Exit", width=btn_width, tag=item_id['buttons']['exit'], callback=self.callback_exit_game)
-					
+					btn_width = col_width - 16
+					btn_h1 = 70
+					btn_h2 = 35
+					dpg.add_button(label="Start", width=btn_width, height=btn_h1, tag=item_id['buttons']['start_stop'], callback=toggle_start_stop_game)
+					dpg.add_button(label="Help", width=btn_width, height=btn_h2, tag=item_id['buttons']['help_open'], callback=self.callback_show_help_dialogue)
+					dpg.add_button(label="Exit", width=btn_width, height=btn_h2, tag=item_id['buttons']['exit'], callback=self.callback_exit_game)
+					dpg.add_button(label="Advanced Settings", width=btn_width, height=btn_h2, tag=item_id['buttons']['settings'], callback=self.callback_show_settings_menu)
+				# Set fonts.
+				dpg.bind_item_font(item_id['text']['title_game'], fonts.large_bold) #fonts.large_font
+				dpg.bind_item_font(item_id['text']['info_game'], fonts.intermediate_font)
+				
+				# Green theme for the start/stop button.
+				with dpg.theme(tag=item_id['theme']['start_green']):
+					with dpg.theme_component(dpg.mvButton): 
+						dpg.add_theme_color(dpg.mvThemeCol_Button, (25, 105, 47)) #(38, 128, 62)
+						dpg.add_theme_color(dpg.mvThemeCol_ButtonHovered, (50, 168, 82))
+						dpg.add_theme_color(dpg.mvThemeCol_ButtonActive, (49, 181, 85))
+				# Red theme for the start/stop button.
+				with dpg.theme(tag=item_id['theme']['stop_red']):
+					with dpg.theme_component(dpg.mvButton): 
+						dpg.add_theme_color(dpg.mvThemeCol_Button, (145, 10, 10)) #(38, 128, 62)
+						dpg.add_theme_color(dpg.mvThemeCol_ButtonHovered, (179, 16, 16))
+						dpg.add_theme_color(dpg.mvThemeCol_ButtonActive, (194, 17, 17))
+				# Set initial theme of start/stop button.
+				dpg.bind_item_theme(item_id['buttons']['start_stop'], item_id['theme']['start_green'])
+
+
 				# Right column: add plotting window with respective graphs.
 				with dpg.child_window(autosize_x=True):
 					# Create all graphs for plotting:
@@ -136,6 +168,25 @@ class GUI:
 				dpg.add_line_series(list(range(10)), list(np.ones(10)), parent=item_id['axes']['timeseries2_yaxis'], tag=item_id['line_series']['timeseries2'])
 				dpg.set_axis_limits(item_id['axes']['timeseries2_yaxis'], y_min, y_max)
 				dpg.set_axis_limits(item_id['axes']['timeseries2_xaxis'], -5, 0)
+# ---
+			"""
+			with dpg.plot(label="Bar Series", height=400, width=-1):
+
+				dpg.add_plot_legend()
+
+				# create x axis
+				dpg.add_plot_axis(dpg.mvXAxis, label="Student", no_gridlines=True)
+				dpg.set_axis_limits(dpg.last_item(), 9, 33)
+				dpg.set_axis_ticks(dpg.last_item(), (("S1", 11), ("S2", 21), ("S3", 31)))
+	
+				# create y axis
+				with dpg.plot_axis(dpg.mvYAxis, label="Score"):
+					dpg.set_axis_limits(dpg.last_item(), 0, 110)
+					dpg.add_bar_series([10, 20, 30], [100, 75, 90], label="Final Exam", weight=1)
+					dpg.add_bar_series([11, 21, 31], [83, 75, 72], label="Midterm Exam", weight=1)
+					dpg.add_bar_series([12, 22, 32], [42, 68, 23], label="Course Grade", weight=1)		
+			"""
+# ---
 		with dpg.group(horizontal=True):
 			with dpg.plot(label='Player 1 - Foucs Metric', width=width, height=height, anti_aliased=True, tag=item_id['plots']['metric1']):
 				# optionally create legend
@@ -334,8 +385,6 @@ class GUI:
 		dpg.split_frame() # Guarantee that the following lines are rendered in another frame. (Only one modal window can be active at any time.)
 		dpg.configure_item(item_id['windows']['loading_screen'], show=True) # Show loading screen.
 		
-		
-
 		# Propagate settings from the GUI to the boardshim. Let the boardshim attempt
 		# to apply the settings and retrieve the status.
 		settings_candidate = self.propagate_settings()
@@ -384,14 +433,15 @@ class GUI:
 		ypos = [0, 1, 0, 1]
 		#btn_height = dpg.get_item_height(btn1)
 		#h = dpg.get_item_height("Time Series") - btn_height - 45
-		h = dpg.get_viewport_client_height() - 45
+		h = dpg.get_viewport_client_height()
 		#w = dpg.get_item_width("Time Series") - 40
-		w = dpg.get_viewport_client_width() - 40
+		w = dpg.get_viewport_client_width()
 		for i, p in enumerate(item_id['plots'].values()):
-			dpg.set_item_height(p, height=h//2)
-			dpg.set_item_width(p, width=w//2)
+			dpg.set_item_height(p, height=(h-45)//2)
+			dpg.set_item_width(p, width=(w-40)//2)
 			dpg.set_item_pos(p, [(w//2)*xpos[i], (h//2)*ypos[i],])
 		
+		dpg.configure_item(item_id['buttons']['settings'], pos=(8, h-60))
 		self.center_windows()
 		self.resize_welcome_window()
 
