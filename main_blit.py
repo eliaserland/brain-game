@@ -170,7 +170,7 @@ class Graph:
 	def _init_plot(self):
 		"""Initialize the time series and associated plots."""
 		# Window limits of time series plot.
-		ylim = 100* 1.1
+		ylim = 200* 1.1
 		fsize = 8   # Fontsize
 		lsize = 0.8 # Line width
 
@@ -413,10 +413,10 @@ class Graph:
 			# Bandpass filter
 			#DataFilter.perform_wavelet_denoising(self.data[channel], 'coif3', 3)
 			#DataFilter.perform_rolling_filter(data[channel], 3, AggOperations.MEDIAN.value)
-			DataFilter.perform_rolling_filter(self.data[channel], 3, AggOperations.MEAN.value)
-			DataFilter.perform_bandpass(data[channel], self.sampling_rate, 40.0, 90.0, 2,
+			#DataFilter.perform_rolling_filter(self.data[channel], 3, AggOperations.MEAN.value)
+			DataFilter.perform_bandpass(data[channel], self.sampling_rate, 25, 25, 1,   #25,24
 			                            FilterTypes.BUTTERWORTH.value, 0)
-			DataFilter.perform_highpass(self.data[channel], self.sampling_rate, 0.1, 2, FilterTypes.BUTTERWORTH.value, 0)
+			#DataFilter.perform_highpass(self.data[channel], self.sampling_rate, 0.1, 2, FilterTypes.BUTTERWORTH.value, 0)
 			#DataFilter.perform_bandpass(data[channel], self.sampling_rate, 51.0, 100.0, 2,
 			#                            FilterTypes.BUTTERWORTH.value, 0)
 			#DataFilter.perform_bandstop(data[channel], self.sampling_rate, 4, 4.0, 2,

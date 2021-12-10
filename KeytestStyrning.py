@@ -17,10 +17,10 @@ class LabyrintStyrning(object):
     def __init__(self):
         #Den inre ska vara servo 1 dvs pin 5
         #Den yttre ska vara servo 2 dvs pin 6
-        self.VinkelVanster1 =90;
-        self.VinkelVanster2 = 125;
-        self.VinkelHoger1 = 120;
-        self.VinkelHoger2 = 75;
+        self.VinkelVanster1 =75;
+        self.VinkelVanster2 = 120;
+        self.VinkelHoger1 = 110;
+        self.VinkelHoger2 = 70;
         #theta1 = 90.0; 
         #theta2 = 90.0;        
         print("in __init__")
@@ -35,8 +35,10 @@ class LabyrintStyrning(object):
         self.servo2.write(self.VinkelVanster2)
         print('Done')
     def __del__(self):
-        print("Shutting down program")
         
+        print("Shutting down program")
+        self.servo1.write(self.VinkelVanster1)
+        self.servo2.write(self.VinkelVanster2)
         self.board.exit()
 #Function that turns the servos to the right postion.
 #Takes the inputs 1 or 2 depending on which servo is wanted 

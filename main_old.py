@@ -100,12 +100,12 @@ class Graph:
 			DataFilter.remove_environmental_noise(self.data[channel], self.sampling_rate, NoiseTypes.FIFTY)
 			
 			#bandpass (freq: 2-32, order: 4 (pretty high to fully remove 100 Hz)) 
-			DataFilter.perform_bandpass(self.data[channel], self.sampling_rate, 50, 50, 2, FilterTypes.BUTTERWORTH.value, 0)
+			DataFilter.perform_bandpass(self.data[channel], self.sampling_rate, 25, 25, 1, FilterTypes.BUTTERWORTH.value, 0)
 
 			#DataFilter.perform_wavelet_denoising(self.data[channel], 'coif3', 3)
 			#Lowpass-filter (cutofffreq: 35, order 4)
-			DataFilter.perform_highpass(self.data[channel], self.sampling_rate, 0.1, 2, FilterTypes.BUTTERWORTH.value, 0)
-			DataFilter.perform_rolling_filter(self.data[channel], 3, AggOperations.MEDIAN.value)
+			#DataFilter.perform_highpass(self.data[channel], self.sampling_rate, 0.1, 2, FilterTypes.BUTTERWORTH.value, 0)
+			#DataFilter.perform_rolling_filter(self.data[channel], 3, AggOperations.MEDIAN.value)
 			#DataFilter.perform_rolling_filter(self.data[channel],5 , AggOperations.MEAN.value)
 			#Maybe could use bandstop
 			DataFilter.perform_bandstop(self.data[channel], self.sampling_rate, 100, 2.0, 2,
