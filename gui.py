@@ -109,6 +109,8 @@ class GUI:
 					dpg.add_button(label="Start", width=btn_width, height=btn_h1, tag=item_id['buttons']['start_stop'], callback=toggle_start_stop_game)
 					dpg.add_button(label="Help", width=btn_width, height=btn_h2, tag=item_id['buttons']['help_open'], callback=self.callback_show_help_dialogue)
 					dpg.add_button(label="Exit", width=btn_width, height=btn_h2, tag=item_id['buttons']['exit'], callback=self.callback_exit_game)
+					
+					dpg.add_image_button()# TODO: FIX LANGUAGUE SELECTOR!
 					dpg.add_button(label="Advanced Settings", width=btn_width, height=btn_h2, tag=item_id['buttons']['settings'], callback=self.callback_show_settings_menu)
 				# Set fonts.
 				dpg.bind_item_font(item_id['text']['title_game'], fonts.large_bold) #fonts.large_font
