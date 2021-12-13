@@ -1,3 +1,4 @@
+import os
 import time
 import logging
 import threading
@@ -8,12 +9,17 @@ from brainflow.board_shim import BoardIds
 
 import braingame
 from datacontainer import DataContainer
-from definitions import item_id
+from definitions import item_id, labels
 from util import FPS, serial_ports
 from dpg_util import *
 import fonts
 
-toggle_state = False
+toggle_state = True # Initialization
+
+# Parameters:
+basepath = "resources" # Folder containing images.
+images = ["sweden.png", "united_kingdom.png"] # Flags
+lang = "eng" # Default language. Valid options: "swe", "eng".
 
 class GUI:
 	def __init__(self) -> None:
@@ -23,6 +29,8 @@ class GUI:
 		self.game_is_running = False
 		self.settings_are_applied = False
 		self.have_shown_help_dialogue = False
+		self.welcome_screen_visible = True
+		self.init_time = time.time() 
 		
 		# Create and initialize all GUI windows.
 		self.__create_welcome_window()
@@ -54,10 +62,14 @@ class GUI:
 		# Create the window.
 		with dpg.window(tag=item_id['windows']['welcome_window'], show=True, no_background=True):
 			# Create text items.
-			dpg.add_text("BrainGame Curiosum", tag=item_id['text']['title'])
-			dpg.add_text("This is a tagline", tag=item_id['text']['tagline'])
-			dpg.add_text("PRESS ENTER TO START", tag=item_id['text']['enter_key'])
-			dpg.add_text("Copyright by Name1, Name2, Name3, Name4, Name5 & Name6", tag=item_id['text']['copyright'])
+			dpg.add_text(labels['welcome_title'][lang], tag=item_id['text']['title'])
+			dpg.add_text(labels['welcome_tagline'][lang], tag=item_id['text']['tagline'])
+			dpg.add_text(labels['welcome_enter'][lang], tag=item_id['text']['enter_key'])
+			dpg.add_text(labels['welcome_copyright'][lang], tag=item_id['text']['copyright'])
+
+			with dpg.group(horizontal=True):
+				item_id['buttons']["img_swe_main"] = add_and_load_image_button(os.path.join(basepath, images[0]), callback=self.set_swedish)
+				item_id['buttons']["img_eng_main"] = add_and_load_image_button(os.path.join(basepath, images[1]), callback=self.set_english)
 		# Set fonts.
 		dpg.bind_item_font(item_id['text']['title'], fonts.huge_font)
 		dpg.bind_item_font(item_id['text']['tagline'], fonts.large_font)
@@ -70,25 +82,11 @@ class GUI:
 
 	def __create_main_window(self):
 		"""Create the main window. """
-		# Define helper function.
-		def toggle_start_stop_game():
-			"""Wrapper function for game start/stop toggle functionality."""
-			global toggle_state
-			toggle_state = not toggle_state
-			if toggle_state:
-				self.callback_start_game()
-				dpg.configure_item(item_id['buttons']['start_stop'], label="Stop")
-				dpg.bind_item_theme(item_id['buttons']['start_stop'], item_id['theme']['stop_red'])
-			else:
-				self.callback_stop_game()
-				dpg.configure_item(item_id['buttons']['start_stop'], label="Start")
-				dpg.bind_item_theme(item_id['buttons']['start_stop'], item_id['theme']['start_green'])
-
 
 		# Key bind: Game start/stop toggle on enter-key and spacebar. Default state: deactivated.
 		with dpg.handler_registry(tag=item_id['registry']['game_key_binds'], show=False):
-			dpg.add_key_press_handler(key=dpg.mvKey_Return, callback=toggle_start_stop_game)
-			dpg.add_key_press_handler(key=dpg.mvKey_Spacebar, callback=toggle_start_stop_game)
+			dpg.add_key_press_handler(key=dpg.mvKey_Return, callback=self.toggle_start_stop_game)
+			dpg.add_key_press_handler(key=dpg.mvKey_Spacebar, callback=self.toggle_start_stop_game)
 
 		# Create the window. Initially hidden.
 		with dpg.window(tag=item_id['windows']['main_window'], show=False):
@@ -98,20 +96,22 @@ class GUI:
 				with dpg.child_window(tag=item_id['windows']['child_window'], width=col_width):
 					dpg.add_spacer(height=5)
 					dpg.add_text(' BrainGame\n Curisosum', tag=item_id['text']['title_game'])
-					info_text = "Short, fun and engaging tagline or description of the game, shorter than the help dialogue, but still useful."
 					dpg.add_spacer(height=10)
-					dpg.add_text(info_text, tag=item_id['text']['info_game'], wrap=col_width)
+					dpg.add_text(labels["info_game"][lang], tag=item_id['text']['info_game'], wrap=col_width-8)
 					dpg.add_spacer(height=10)
 					# Main game buttons
 					btn_width = col_width - 16
 					btn_h1 = 70
 					btn_h2 = 35
-					dpg.add_button(label="Start", width=btn_width, height=btn_h1, tag=item_id['buttons']['start_stop'], callback=toggle_start_stop_game)
-					dpg.add_button(label="Help", width=btn_width, height=btn_h2, tag=item_id['buttons']['help_open'], callback=self.callback_show_help_dialogue)
-					dpg.add_button(label="Exit", width=btn_width, height=btn_h2, tag=item_id['buttons']['exit'], callback=self.callback_exit_game)
+					dpg.add_button(label=labels['start_btn'][lang], width=btn_width, height=btn_h1, tag=item_id['buttons']['start_stop'], callback=self.toggle_start_stop_game)
+					dpg.add_button(label=labels['help_btn'][lang], width=btn_width, height=btn_h2, tag=item_id['buttons']['help_open'], callback=self.callback_show_help_dialogue)
+					dpg.add_button(label=labels['exit_btn'][lang], width=btn_width, height=btn_h2, tag=item_id['buttons']['exit'], callback=self.callback_exit_game)
 					
-					dpg.add_image_button()# TODO: FIX LANGUAGUE SELECTOR!
-					dpg.add_button(label="Advanced Settings", width=btn_width, height=btn_h2, tag=item_id['buttons']['settings'], callback=self.callback_show_settings_menu)
+					with dpg.group(horizontal=True):
+						item_id['buttons']["img_swe_main"] = add_and_load_image_button(os.path.join(basepath, images[0]), callback=self.set_swedish)
+						item_id['buttons']["img_eng_main"] = add_and_load_image_button(os.path.join(basepath, images[1]), callback=self.set_english)
+
+					dpg.add_button(label=labels['settings_btn'][lang], width=btn_width, height=btn_h2, tag=item_id['buttons']['settings'], callback=self.callback_show_settings_menu)
 				# Set fonts.
 				dpg.bind_item_font(item_id['text']['title_game'], fonts.large_bold) #fonts.large_font
 				dpg.bind_item_font(item_id['text']['info_game'], fonts.intermediate_font)
@@ -131,7 +131,6 @@ class GUI:
 				# Set initial theme of start/stop button.
 				dpg.bind_item_theme(item_id['buttons']['start_stop'], item_id['theme']['start_green'])
 
-
 				# Right column: add plotting window with respective graphs.
 				with dpg.child_window(autosize_x=True):
 					# Create all graphs for plotting:
@@ -145,26 +144,26 @@ class GUI:
 		height = 375
 
 		with dpg.group(horizontal=True):
-			with dpg.plot(label='Player 1 - Time Series', width=width, height=height, anti_aliased=True, tag=item_id['plots']['timeseries1']):
+			with dpg.plot(label=labels['p1_ts_title'][lang], width=width, height=height, anti_aliased=True, tag=item_id['plots']['timeseries1']):
 				# optionally create legend
 				dpg.add_plot_legend()
 
 				# REQUIRED: create x and y axes
-				dpg.add_plot_axis(dpg.mvXAxis, label="Time (s)", tag=item_id['axes']['timeseries1_xaxis'])
-				dpg.add_plot_axis(dpg.mvYAxis, label="Voltage (uV)", tag=item_id['axes']['timeseries1_yaxis'])
+				dpg.add_plot_axis(dpg.mvXAxis, label=labels['ts_xax'][lang], tag=item_id['axes']['timeseries1_xaxis'])
+				dpg.add_plot_axis(dpg.mvYAxis, label=labels['ts_yax'][lang], tag=item_id['axes']['timeseries1_yaxis'])
 
 				# series belong to a y axis
 				dpg.add_line_series(list(range(10)), list(np.ones(10)), parent=item_id['axes']['timeseries1_yaxis'], tag=item_id['line_series']['timeseries1'])
 				dpg.set_axis_limits(item_id['axes']['timeseries1_yaxis'], y_min, y_max)
 				dpg.set_axis_limits(item_id['axes']['timeseries1_xaxis'], -5, 0)
 
-			with dpg.plot(label='Player 2 - Time Series', width=width, height=height, anti_aliased=True, tag=item_id['plots']['timeseries2']):
+			with dpg.plot(label=labels['p2_ts_title'][lang], width=width, height=height, anti_aliased=True, tag=item_id['plots']['timeseries2']):
 				# optionally create legend
 				dpg.add_plot_legend()
 
 				# REQUIRED: create x and y axes
-				dpg.add_plot_axis(dpg.mvXAxis, label="Time (s)", tag=item_id['axes']['timeseries2_xaxis'])
-				dpg.add_plot_axis(dpg.mvYAxis, label="Voltage (uV)", tag=item_id['axes']['timeseries2_yaxis'])
+				dpg.add_plot_axis(dpg.mvXAxis, label=labels['ts_xax'][lang], tag=item_id['axes']['timeseries2_xaxis'])
+				dpg.add_plot_axis(dpg.mvYAxis, label=labels['ts_yax'][lang], tag=item_id['axes']['timeseries2_yaxis'])
 
 				# series belong to a y axis
 				dpg.add_line_series(list(range(10)), list(np.ones(10)), parent=item_id['axes']['timeseries2_yaxis'], tag=item_id['line_series']['timeseries2'])
@@ -190,26 +189,26 @@ class GUI:
 			"""
 # ---
 		with dpg.group(horizontal=True):
-			with dpg.plot(label='Player 1 - Foucs Metric', width=width, height=height, anti_aliased=True, tag=item_id['plots']['metric1']):
+			with dpg.plot(label=labels['p1_me_title'][lang], width=width, height=height, anti_aliased=True, tag=item_id['plots']['metric1']):
 				# optionally create legend
 				dpg.add_plot_legend()
 
 				# REQUIRED: create x and y axes
-				dpg.add_plot_axis(dpg.mvXAxis, label="Time (s)", tag=item_id['axes']['metric1_xaxis'])
-				dpg.add_plot_axis(dpg.mvYAxis, label="Metric", tag=item_id['axes']['metric1_yaxis'])
+				dpg.add_plot_axis(dpg.mvXAxis, label=labels['me_xax'][lang], tag=item_id['axes']['metric1_xaxis'])
+				dpg.add_plot_axis(dpg.mvYAxis, label=labels['me_yax'][lang], tag=item_id['axes']['metric1_yaxis'])
 
 				# series belong to a y axis
 				dpg.add_line_series(list(range(10)), list(np.ones(10)), parent=item_id['axes']['metric1_yaxis'], tag=item_id['line_series']['metric1'])
 				dpg.set_axis_limits(item_id['axes']['metric1_yaxis'], -0.005, 1.005)
 				dpg.set_axis_limits(item_id['axes']['metric1_xaxis'], -5, 0)
 			
-			with dpg.plot(label='Player 2 - Focus Metric', width=width, height=height, anti_aliased=True, tag=item_id['plots']['metric2']):
+			with dpg.plot(label=labels['p2_me_title'][lang], width=width, height=height, anti_aliased=True, tag=item_id['plots']['metric2']):
 				# optionally create legend
 				dpg.add_plot_legend()
 
 				# REQUIRED: create x and y axes
-				dpg.add_plot_axis(dpg.mvXAxis, label="Time (s)", tag=item_id['axes']['metric2_xaxis'])
-				dpg.add_plot_axis(dpg.mvYAxis, label="Metric", tag=item_id['axes']['metric2_yaxis'])
+				dpg.add_plot_axis(dpg.mvXAxis, label=labels['me_xax'][lang], tag=item_id['axes']['metric2_xaxis'])
+				dpg.add_plot_axis(dpg.mvYAxis, label=labels['me_yax'][lang], tag=item_id['axes']['metric2_yaxis'])
 
 				# series belong to a y axis
 				series4 = dpg.add_line_series(list(range(10)), list(np.ones(10)), parent=item_id['axes']['metric2_yaxis'], tag=item_id['line_series']['metric2'])
@@ -222,35 +221,37 @@ class GUI:
 		with dpg.window(tag=item_id['windows']['loading_screen'], height=100, width=450, show=False, no_resize=True, 
 		                no_close=False, no_move=True, no_title_bar=True, modal=True):
 			dpg.add_loading_indicator(tag=item_id['indicator']['settings_loading'], pos=(20, 19), style=0)
-			dpg.add_text("Applying settings...", pos=(95, 35), tag=item_id['text']['loading'])
+			dpg.add_text(labels['loading_applying'][lang], pos=(95, 35), tag=item_id['text']['loading'])
 
 	def __create_help_dialogue(self):
 		"""Create the help dialogue."""
 		# Create the window. Initially hidden.
-		with dpg.window(label="Help", tag=item_id['windows']['help_dialogue'], height=600, width=800, show=False, 
+		h, w = 500, 700
+		with dpg.window(label=labels['help_title'][lang], tag=item_id['windows']['help_dialogue'], height=h, width=w, show=False, 
 		                no_resize=True, no_move=True, modal=True, no_title_bar=False, on_close=self.callback_close_help_dialogue):
-			dpg.add_text("This is a help text", pos=(95, 35), tag=item_id['text']['help'])
-			dpg.add_button(label="Close", tag=item_id['buttons']['help_close'], callback=self.callback_close_help_dialogue)
+			dpg.add_text(labels['help_text'][lang], tag=item_id['text']['help'])
+			btn_h, btn_w = 35, 200-16
+			dpg.add_button(label=labels['help_close'][lang], tag=item_id['buttons']['help_close'], callback=self.callback_close_help_dialogue, pos=(w//2 - btn_w//2, h-50), height=btn_h, width=btn_w)
 
 	def __create_settings_menu(self):
 		"""Create the settings menu."""
 		# Contains the last settings which was successfully applied.
 		self.last_working_settings = None
-
 		# Create the settings window.
-		with dpg.window(tag=item_id['windows']['settings_window'], label="Settings", height=150, width=450, 
+		h, w = 150, 450
+		with dpg.window(tag=item_id['windows']['settings_window'], label=labels['settings_title'][lang], height=h, width=w, 
 		                modal=True, show=False, no_close=True, no_move=True, no_resize=True, no_collapse=True):
 			# Create drop-down menu for Board-ID selector:
 			all_boards = BoardIds._member_names_
-			combo1 = dpg.add_combo(all_boards, label="Board ID", default_value=all_boards[2], tag=item_id['combos']['board_id'])
+			combo1 = dpg.add_combo(all_boards, label=labels['sett_boardid'][lang], default_value=all_boards[2], tag=item_id['combos']['board_id'])
 
 			# Create bottom row of buttons: OK, Reset & Cancel.
 			dpg.add_spacer(height=10)
 			with dpg.group(horizontal=True): 
-				btn_width = 100 
-				dpg.add_button(label="OK", callback=self.callback_settings_ok, width=btn_width, tag=item_id['buttons']['ok'])
-				dpg.add_button(label="Reset", callback=self.callback_settings_reset, width=btn_width, tag=item_id['buttons']['reset'])
-				dpg.add_button(label="Cancel", callback=self.callback_settings_cancel, width=btn_width, tag=item_id['buttons']['cancel'], enabled=False) # Initially disabled.
+				btn_w, btn_h = 100, 30 
+				dpg.add_button(label=labels['settings_ok'][lang], callback=self.callback_settings_ok, width=btn_w, height=btn_h, tag=item_id['buttons']['ok'], pos=(w//2-btn_w//2 - btn_w-8, h-btn_h-8))
+				dpg.add_button(label=labels['settings_reset'][lang], callback=self.callback_settings_reset, width=btn_w, height=btn_h, tag=item_id['buttons']['reset'], pos=(w//2-btn_w//2, h-btn_h-8))
+				dpg.add_button(label=labels['settings_cancel'][lang], callback=self.callback_settings_cancel, width=btn_w, height=btn_h, tag=item_id['buttons']['cancel'], pos=(w//2-btn_w//2+btn_w+8, h-btn_h-8), enabled=False) # Initially disabled.
 
 				# Gray out the cancel button initially. Used to indicate that settings must be loaded successfully at least once at program startup.
 				self.default_theme = dpg.get_item_theme(item_id['buttons']['cancel'])
@@ -261,6 +262,14 @@ class GUI:
 						dpg.add_theme_color(dpg.mvThemeCol_Text, (151, 151, 151))
 				dpg.bind_item_theme(item_id['buttons']['cancel'], item_id['theme']['disabled'])
 
+	def callback_render_frame(self):
+		"""Callback function executed at every rendered frame."""
+		if self.welcome_screen_visible: 
+			# Make "enter-key" phrase pulsate at the welcome screen.
+			t = time.time() - self.init_time
+			opacity = int(128*np.sin(3*t) + 128) # In range [0, 256)
+			dpg.configure_item(item_id['text']['enter_key'], color=(255, 255, 255, opacity))
+	
 	def callback_enter_game(self):
 		"""
 		Callback function used to transition from the welcome screen to the main 
@@ -282,6 +291,7 @@ class GUI:
 			self.callback_show_settings_menu()
 		else: 
 			self.callback_show_help_dialogue()
+		self.welcome_screen_visible = False
 		
 		# Force resize all items to ensure correct scaling/positions.
 		self.window_resize()
@@ -301,6 +311,7 @@ class GUI:
 		# Hide main game window, show the welcome screen.
 		dpg.configure_item(item_id['windows']['main_window'], show=False)
 		dpg.configure_item(item_id['windows']['welcome_window'], show=True)
+		self.welcome_screen_visible = True
 
 		# Set the welcome screen as the primary window.
 		dpg.set_primary_window(item_id['windows']['welcome_window'], True)
@@ -310,6 +321,7 @@ class GUI:
 
 		# Reset help dialogue status.
 		self.have_shown_help_dialogue = False
+
 
 	def propagate_settings(self) -> list:
 		"""Propagate settings selected in the GUI to the underlying game logic. """
@@ -360,6 +372,7 @@ class GUI:
 		dpg.split_frame() # Guarantee next lines will be rendered in a new frame.
 		dpg.configure_item(item_id['windows']['help_dialogue'], show=True) # Show the window.
 		dpg.configure_item(item_id['registry']['game_key_binds'], show=False) # Deactivate game key-binds.
+		self.have_shown_help_dialogue = True
 
 	def callback_close_help_dialogue(self):
 		"""Callback function to close the help dialogue."""
@@ -393,14 +406,14 @@ class GUI:
 		status = self.game.callback_apply_settings()
 		if status:
 			# Settings were loaded successfully.
-			dpg.configure_item(item_id['text']['loading'], default_value="Successfully applied settings.")
+			dpg.configure_item(item_id['text']['loading'], default_value=labels['loading_success'][lang])
 			if not self.settings_are_applied:
 				__enable_cancel_button()
 				self.settings_are_applied = True
 			self.last_working_settings = settings_candidate # Save working settings.
 		else:
 			# Failure occured while attempting to load settings.
-			dpg.configure_item(item_id['text']['loading'], default_value="Failure occured while applying settings.\nPlease check log for details.", pos=(95, 25))
+			dpg.configure_item(item_id['text']['loading'], default_value=labels['loading_failure'][lang], pos=(95, 25))
 			if self.settings_are_applied:
 				__disable_cancel_button()
 				self.settings_are_applied = False
@@ -413,7 +426,7 @@ class GUI:
 		# Hide the loading screen and reset it to default values.
 		dpg.configure_item(item_id['windows']['loading_screen'], show=False) 
 		dpg.configure_item(item_id['indicator']['settings_loading'], speed=1)
-		dpg.configure_item(item_id['text']['loading'], default_value="Applying settings...", pos=(95, 37))
+		dpg.configure_item(item_id['text']['loading'], default_value=labels['loading_applying'][lang], pos=(95, 37))
 
 		# If successful, return the main game screen. Else return to the settings menu.
 		if status:
@@ -442,7 +455,8 @@ class GUI:
 			dpg.set_item_height(p, height=(h-45)//2)
 			dpg.set_item_width(p, width=(w-40)//2)
 			dpg.set_item_pos(p, [(w//2)*xpos[i], (h//2)*ypos[i],])
-		
+
+		dpg.configure_item(item_id['buttons']["img_swe_main"], pos=(8, h-124))
 		dpg.configure_item(item_id['buttons']['settings'], pos=(8, h-60))
 		self.center_windows()
 		self.resize_welcome_window()
@@ -473,32 +487,113 @@ class GUI:
 		# Get viewport dimensions.
 		h = dpg.get_viewport_client_height()
 		w = dpg.get_viewport_client_width()
-		# Title position
-		title_width = dpg.get_item_width(item_id['text']['title'])
-		title_xpos = w//2 - 325
+		# Title position (manual adjustment for each language)
+		title_xpos = {
+			"eng": w//2 - 325,
+			"swe": w//2 - 325,
+		}
 		title_ypos = int(0.15*h)
-		dpg.set_item_pos(item_id['text']['title'], (title_xpos, title_ypos))
+		dpg.set_item_pos(item_id['text']['title'], (title_xpos[lang], title_ypos))
 		# Tagline position
-		tagline_xpos = w//2 - 120
+		tagline_xpos = {
+			"eng": w//2 - 120, 
+			"swe": w//2 - 135,
+		}
 		tagline_ypos = title_ypos + 90
-		dpg.set_item_pos(item_id['text']['tagline'], (tagline_xpos, tagline_ypos))
+		dpg.set_item_pos(item_id['text']['tagline'], (tagline_xpos[lang], tagline_ypos))
 		# Press enter to start position
-		enter_xpos = w//2 - 190
+		enter_xpos = {
+			"eng": w//2 - 160,
+			"swe": w//2 - 195,
+		}
 		enter_ypos = int(np.maximum(tagline_ypos + 100, 0.6*h)) 
-		dpg.set_item_pos(item_id['text']['enter_key'], (enter_xpos, enter_ypos))
+		dpg.set_item_pos(item_id['text']['enter_key'], (enter_xpos[lang], enter_ypos))
 		# Copyright position
-		copy_xpos = w//2 - 235
+		copy_xpos = {
+			"eng": w//2 - 445,
+			"swe": w//2 - 445,
+		}
 		copy_ypos = h - 50
-		dpg.set_item_pos(item_id['text']['copyright'], (copy_xpos, copy_ypos))
+		dpg.set_item_pos(item_id['text']['copyright'], (copy_xpos[lang], copy_ypos))
 
+	def set_swedish(self):
+		self.set_language("swe")
+		self.window_resize()
+
+	def set_english(self):
+		self.set_language("eng")
+		self.window_resize()
+
+	def set_language(self, language):
+		"""Apply the specifed language to all text items and labels."""
+		global lang
+		lang = language # Set the global language
+
+		# Set start/stop button.
+		if self.game_is_running:
+			dpg.configure_item(item_id['buttons']['start_stop'], label=labels['stop_btn'][lang])
+		else: 
+			dpg.configure_item(item_id['buttons']['start_stop'], label=labels['start_btn'][lang])
+		# Set help, exit, settings buttons.
+		dpg.configure_item(item_id['buttons']['help_open'], label=labels['help_btn'][lang])
+		dpg.configure_item(item_id['buttons']['exit'], label=labels['exit_btn'][lang])
+		dpg.configure_item(item_id['buttons']['settings'], label=labels['settings_btn'][lang])
+		
+		# Short description on main game screen.
+		dpg.configure_item(item_id['text']['info_game'], default_value=labels["info_game"][lang])
+
+		# Welcome screen
+		dpg.configure_item(item_id['text']['title'], default_value=labels['welcome_title'][lang])
+		dpg.configure_item(item_id['text']['tagline'], default_value=labels['welcome_tagline'][lang])
+		dpg.configure_item(item_id['text']['enter_key'], default_value=labels['welcome_enter'][lang])
+		dpg.configure_item(item_id['text']['copyright'], default_value=labels['welcome_copyright'][lang])
+
+		# Plots - Time series
+		dpg.configure_item(item_id['plots']['timeseries1'], label=labels['p1_ts_title'][lang])
+		dpg.configure_item(item_id['plots']['timeseries2'], label=labels['p2_ts_title'][lang])
+		dpg.configure_item(item_id['axes']['timeseries1_xaxis'], label=labels['ts_xax'][lang])
+		dpg.configure_item(item_id['axes']['timeseries1_yaxis'], label=labels['ts_yax'][lang])
+		dpg.configure_item(item_id['axes']['timeseries2_xaxis'], label=labels['ts_xax'][lang])
+		dpg.configure_item(item_id['axes']['timeseries2_yaxis'], label=labels['ts_yax'][lang])
 	
+		# Plots - Focus Metric
+		dpg.configure_item(item_id['plots']['metric1'], label=labels['p1_me_title'][lang])
+		dpg.configure_item(item_id['plots']['metric2'], label=labels['p2_me_title'][lang])
+		dpg.configure_item(item_id['axes']['metric1_xaxis'], label=labels['me_xax'][lang])
+		dpg.configure_item(item_id['axes']['metric1_yaxis'], label=labels['me_yax'][lang])
+		dpg.configure_item(item_id['axes']['metric2_xaxis'], label=labels['me_xax'][lang])
+		dpg.configure_item(item_id['axes']['metric2_yaxis'], label=labels['me_yax'][lang])
+
+		# Help dialogue
+		dpg.configure_item(item_id['windows']['help_dialogue'], label=labels['help_title'][lang])
+		dpg.configure_item(item_id['text']['help'], default_value=labels['help_text'][lang])
+		dpg.configure_item(item_id['buttons']['help_close'], label=labels['help_close'][lang])
+
+		# Settings window
+		dpg.configure_item(item_id['windows']['settings_window'], label=labels['settings_title'][lang])
+		dpg.configure_item(item_id['combos']['board_id'], label=labels['sett_boardid'][lang])
+		dpg.configure_item(item_id['buttons']['ok'], label=labels['settings_ok'][lang])
+		dpg.configure_item(item_id['buttons']['reset'], label=labels['settings_reset'][lang])
+		dpg.configure_item(item_id['buttons']['cancel'], label=labels['settings_cancel'][lang])
+
+		# Loading screen
+		dpg.configure_item(item_id['text']['loading'], default_value=labels['loading_applying'][lang])
 
 	#----------------------------------------------------------------------
 	#----------------------------------------------------------------------
 	#----------------------------------------------------------------------
+
+	def toggle_start_stop_game(self):
+		"""Wrapper function for game start/stop toggle functionality."""
+		global toggle_state
+		if toggle_state:
+			self.callback_start_game()
+		else:
+			self.callback_stop_game()
 
 	def callback_start_game(self) -> None:
 		"""Callback to start a new game."""
+		global toggle_state
 		if not self.game_is_running:
 			try:
 				logging.info("GUI: Starting game")
@@ -510,22 +605,33 @@ class GUI:
 				self.game_is_running = True
 				self.thread = threading.Thread(target=self.__gui_loop, daemon=False)
 				self.thread.start()
+				# Set theme of start/stop button
+				dpg.configure_item(item_id['buttons']['start_stop'], label=labels['stop_btn'][lang])
+				dpg.bind_item_theme(item_id['buttons']['start_stop'], item_id['theme']['stop_red'])
+				# Toggle start/stop state.
+				toggle_state = not toggle_state
 			except BaseException:
 				logging.warning('Exception', exc_info=True)
 				self.game_is_running = False
 				self.callback_stop_game()
 
 		else:
-			logging.info("GUI: Game is already running")
+			logging.info("GUI: callback_start_game: Game is already running")
 
 	def callback_stop_game(self, reset_game=False) -> None:
 		"""Callback to stop and end a running game."""
+		global toggle_state
 		if self.game_is_running:
 			logging.info("GUI: Stopping game")
 			self.game_is_running = False
 			self.game.stop_game()
 			self.data.destroy()
 			self.thread.join()
+			# Set theme of start/stop button
+			dpg.configure_item(item_id['buttons']['start_stop'], label=labels['start_btn'][lang])
+			dpg.bind_item_theme(item_id['buttons']['start_stop'], item_id['theme']['start_green'])
+			# Toggle start/stop state.
+			toggle_state = not toggle_state
 		else:
 			logging.info("GUI: No game is running")
 
@@ -534,9 +640,6 @@ class GUI:
 		pass
 
 	def callback_focus_settings(self):
-		pass
-
-	def callback_language_setting(self):
 		pass
 
 	def __gui_loop(self):
@@ -565,6 +668,13 @@ class GUI:
 			dpg.set_value(item_id['line_series']['metric2'], [list(metric_time2), list(metric2)])
 
 
-
+def add_and_load_image_button(image_path, parent=None, callback=None):
+	width, height, channels, data = dpg.load_image(image_path)
+	with dpg.texture_registry() as reg_id:
+		texture_id = dpg.add_static_texture(width, height, data, parent=reg_id)
+	if parent is None:
+		return dpg.add_image_button(texture_id, width=80, height=80/1.6, callback=callback)
+	else:
+		return dpg.add_image_button(texture_id, width=80, height=80/1.6, parent=parent, callback=callback)
 
 

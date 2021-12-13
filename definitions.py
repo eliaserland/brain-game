@@ -43,6 +43,10 @@ item_id = {
 		"loading": dpg.generate_uuid(),
 		"help_open": dpg.generate_uuid(),
 		"help_close": dpg.generate_uuid(),
+		"img_swe_main": dpg.generate_uuid(),
+		"img_eng_main": dpg.generate_uuid(),
+		"img_swe_welc": dpg.generate_uuid(),
+		"img_swe_welc": dpg.generate_uuid(),
 	},
 	"combos": {
 		"board_id": dpg.generate_uuid()
@@ -72,14 +76,139 @@ item_id = {
 }
 
 # All descriptive texts in the game, in swedish and english.
-desc = {
-	"timeseries_title": {
-		"eng": 'Time Series',
-		"swe": 'Tidserie',
+labels = {
+	"start_btn": {
+		"eng": "Start",
+		"swe": "Starta",
 	},
-	"metric_title": {
-		"eng": 'Focus Metric',
-		"swe": 'Fokusmättal',
-	}
+	"stop_btn": {
+		"eng": "Stop",
+		"swe": "Stopp",
+	},
+	"help_btn": {
+		"eng": "Help",
+		"swe": "Hjälp",
+	},
+	"exit_btn": {
+		"eng": "Exit",
+		"swe": "Avsluta",
+	},
+	"settings_btn": {
+		"eng": "Advanced Settings",
+		"swe": "Avancerade Inställningar",
+	},
+	"p1_ts_title": {
+		"eng": "Player 1 - Time Series",
+		"swe": "Spelare 1 - Tidsserie",
+	},
+	"p2_ts_title": {
+		"eng": "Player 2 - Time Series",
+		"swe": "Spelare 2 - Tidsserie",
+	},
+	"ts_xax": {
+		"eng": "Time (s)",
+		"swe": "Tid (s)",
+	},
+	"ts_yax": {
+		"eng": "Voltage (uV)",
+		"swe": "Elektrisk Spänning (uV)",
+	},
+	"p1_br_title": {
+		"eng": "Player 1 - Band Power",
+		"swe": "Spelare 1 - Frekvensband",
+	},
+	"p2_br_title": {
+		"eng": "Player 2 - Band Power",
+		"swe": "Spelare 2 - Frekvensband",
+	},
+	"br_xax": { # TODO: REDO THIS, NOT CORRECT
+		"eng": "Time (s)",
+		"swe": "Tid (s)",
+	},
+	"br_yax": { # TODO: REDO THIS, NOT CORRECT
+		"eng": "Voltage (uV)",
+		"swe": "Elektrisk Spänning (uV)",
+	},
+	"p1_me_title": {
+		"eng": "Player 1 - Focus Metric",
+		"swe": "Spelare 1 - Fokusmättal",
+	},
+	"p2_me_title": {
+		"eng": "Player 2 - Focus Metric",
+		"swe": "Spelare 2 - Fokusmättal",
+	},
+	"me_xax": {
+		"eng": "Time (s)",
+		"swe": "Tid (s)",
+	},
+	"me_yax": {
+		"eng": "Metric value",
+		"swe": "Mättal",
+	},
+	"help_title": {
+		"eng": "Help",
+		"swe": "Hjälp",
+	},
+	"help_close": {
+		"eng": "Close",
+		"swe": "Stäng",
+	},
+	"help_text": {
+		"eng": "This is a help text",
+		"swe": "Detta är en hjälpsam text.",
+	},
+	"settings_title": {
+		"eng": "Settings",
+		"swe": "Inställningar",
+	},
+	"sett_boardid": {
+		"eng": "Board ID",
+		"swe": "Board ID",
+	},
+	"settings_ok": {
+		"eng": "OK",
+		"swe": "OK",
+	},
+	"settings_reset": {
+		"eng": "Reset",
+		"swe": "Återställ",
+	},
+	"settings_cancel": {
+		"eng": "Cancel",
+		"swe": "Avbryt",
+	},
+	"info_game": {
+		"eng": "Short, fun and engaging tagline or description of the game, shorter than the help dialogue, but still useful.", 
+		"swe": "Kort, rolig och engagerande beskrivning av spelet, kortare än hjälp-dialogen, men fortfarande användbar.",
+	},
+	"loading_applying": {
+		"eng": "Applying settings...",
+		"swe": "Applicerar inställningar...",
+	},
+	"loading_success": {
+		"eng": "Successfully applied settings.",
+		"swe": "Inställningarna har applicerats.",
+	},
+	"loading_failure": {
+		"eng": "Failure occured while applying settings.\nPlease check log for details.",
+		"swe": "Fel uppstod under applicering av inställningarna.\nVänligen kontrollera loggen för detaljer.",
+	},
+	"welcome_title": {
+		"eng": "BrainGame Curiosum",
+		"swe": "BrainGame Curiosum",
+	},
+	"welcome_tagline": {
+		"eng": "This is a tagline",
+		"swe": "Detta är en slogan",
+	},
+	"welcome_enter": {
+		"eng": "Press ENTER to start",
+		"swe": "Tryck ENTER för att starta",
+	},
+	"welcome_copyright": {
+		"eng": "Copyright by Alfons Edbom Devall, Alfred Leimar, Elsa Magnusson, Elias Olofsson, Jacob Persson & Jennica Sandberg",
+		"swe": "Copyright av Alfons Edbom Devall, Alfred Leimar, Elsa Magnusson, Elias Olofsson, Jacob Persson & Jennica Sandberg",
+	},
+
 }
 
