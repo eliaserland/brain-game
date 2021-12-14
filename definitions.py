@@ -14,8 +14,10 @@ item_id = {
 	"plots": {
 		"timeseries1": dpg.generate_uuid(),
 		"timeseries2": dpg.generate_uuid(),
+		"bar1": dpg.generate_uuid(),
+		"bar2": dpg.generate_uuid(),
 		"metric1": dpg.generate_uuid(),
-		"metric2": dpg.generate_uuid()
+		"metric2": dpg.generate_uuid(),
 	},
 	"line_series": {
 		"timeseries1": dpg.generate_uuid(),
@@ -23,11 +25,19 @@ item_id = {
 		"metric1": dpg.generate_uuid(),
 		"metric2": dpg.generate_uuid()
 	},
+	"bar1_series": [dpg.generate_uuid(), dpg.generate_uuid(), dpg.generate_uuid(), 
+	               dpg.generate_uuid(), dpg.generate_uuid()],
+	"bar2_series": [dpg.generate_uuid(), dpg.generate_uuid(), dpg.generate_uuid(), 
+	               dpg.generate_uuid(), dpg.generate_uuid()],
 	"axes": {
 		"timeseries1_yaxis": dpg.generate_uuid(),
 		"timeseries1_xaxis": dpg.generate_uuid(),
 		"timeseries2_yaxis": dpg.generate_uuid(),
 		"timeseries2_xaxis": dpg.generate_uuid(),
+		"bar1_yaxis": dpg.generate_uuid(),
+		"bar1_xaxis": dpg.generate_uuid(),
+		"bar2_yaxis": dpg.generate_uuid(),
+		"bar2_xaxis": dpg.generate_uuid(),
 		"metric1_yaxis": dpg.generate_uuid(),
 		"metric1_xaxis": dpg.generate_uuid(),
 		"metric2_yaxis": dpg.generate_uuid(),
@@ -121,13 +131,9 @@ labels = {
 		"eng": "Player 2 - Band Power",
 		"swe": "Spelare 2 - Frekvensband",
 	},
-	"br_xax": { # TODO: REDO THIS, NOT CORRECT
-		"eng": "Time (s)",
-		"swe": "Tid (s)",
-	},
-	"br_yax": { # TODO: REDO THIS, NOT CORRECT
-		"eng": "Voltage (uV)",
-		"swe": "Elektrisk Spänning (uV)",
+	"br_yax": {
+		"eng": "Power (uV)^2/Hz",
+		"swe": "Effekt (uV)^2/Hz",
 	},
 	"p1_me_title": {
 		"eng": "Player 1 - Focus Metric",

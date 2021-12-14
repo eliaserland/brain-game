@@ -66,7 +66,7 @@ class GUI:
 			dpg.add_text(labels['welcome_tagline'][lang], tag=item_id['text']['tagline'])
 			dpg.add_text(labels['welcome_enter'][lang], tag=item_id['text']['enter_key'])
 			dpg.add_text(labels['welcome_copyright'][lang], tag=item_id['text']['copyright'])
-
+			# Flag-image buttons for language selection.
 			with dpg.group(horizontal=True):
 				item_id['buttons']["img_swe_main"] = add_and_load_image_button(os.path.join(basepath, images[0]), callback=self.set_swedish)
 				item_id['buttons']["img_eng_main"] = add_and_load_image_button(os.path.join(basepath, images[1]), callback=self.set_english)
@@ -92,25 +92,25 @@ class GUI:
 		with dpg.window(tag=item_id['windows']['main_window'], show=False):
 			with dpg.group(horizontal=True): # Horizontal grouping.
 				# Left column: add game buttons and text items
-				col_width = 200
-				with dpg.child_window(tag=item_id['windows']['child_window'], width=col_width):
+				self.col_width = 200
+				with dpg.child_window(tag=item_id['windows']['child_window'], width=self.col_width):
 					dpg.add_spacer(height=5)
 					dpg.add_text(' BrainGame\n Curisosum', tag=item_id['text']['title_game'])
 					dpg.add_spacer(height=10)
-					dpg.add_text(labels["info_game"][lang], tag=item_id['text']['info_game'], wrap=col_width-8)
+					dpg.add_text(labels["info_game"][lang], tag=item_id['text']['info_game'], wrap=self.col_width-8)
 					dpg.add_spacer(height=10)
 					# Main game buttons
-					btn_width = col_width - 16
+					btn_width = self.col_width - 16
 					btn_h1 = 70
 					btn_h2 = 35
 					dpg.add_button(label=labels['start_btn'][lang], width=btn_width, height=btn_h1, tag=item_id['buttons']['start_stop'], callback=self.toggle_start_stop_game)
 					dpg.add_button(label=labels['help_btn'][lang], width=btn_width, height=btn_h2, tag=item_id['buttons']['help_open'], callback=self.callback_show_help_dialogue)
 					dpg.add_button(label=labels['exit_btn'][lang], width=btn_width, height=btn_h2, tag=item_id['buttons']['exit'], callback=self.callback_exit_game)
-					
+					# Flag-image buttons for language selection.
 					with dpg.group(horizontal=True):
 						item_id['buttons']["img_swe_main"] = add_and_load_image_button(os.path.join(basepath, images[0]), callback=self.set_swedish)
 						item_id['buttons']["img_eng_main"] = add_and_load_image_button(os.path.join(basepath, images[1]), callback=self.set_english)
-
+					# Settings button.
 					dpg.add_button(label=labels['settings_btn'][lang], width=btn_width, height=btn_h2, tag=item_id['buttons']['settings'], callback=self.callback_show_settings_menu)
 				# Set fonts.
 				dpg.bind_item_font(item_id['text']['title_game'], fonts.large_bold) #fonts.large_font
@@ -138,82 +138,82 @@ class GUI:
 	
 	def __create_all_graphs(self):
 		"""Create and initialize all plotting graphs of the main game window."""
-		y_min = -100
-		y_max = 100
-		width = 550
-		height = 375
+		y_min, y_max = -100, 100 # Time series y-axis limits.
 
-		with dpg.group(horizontal=True):
-			with dpg.plot(label=labels['p1_ts_title'][lang], width=width, height=height, anti_aliased=True, tag=item_id['plots']['timeseries1']):
-				# optionally create legend
-				dpg.add_plot_legend()
+		# --- TIME SERIES GRAPHS ---
+		with dpg.plot(label=labels['p1_ts_title'][lang], tag=item_id['plots']['timeseries1'], anti_aliased=True):
+			# REQUIRED: create x and y axes
+			dpg.add_plot_axis(dpg.mvXAxis, label=labels['ts_xax'][lang], tag=item_id['axes']['timeseries1_xaxis'], no_gridlines=True)
+			dpg.add_plot_axis(dpg.mvYAxis, label=labels['ts_yax'][lang], tag=item_id['axes']['timeseries1_yaxis'], no_gridlines=True)
 
-				# REQUIRED: create x and y axes
-				dpg.add_plot_axis(dpg.mvXAxis, label=labels['ts_xax'][lang], tag=item_id['axes']['timeseries1_xaxis'])
-				dpg.add_plot_axis(dpg.mvYAxis, label=labels['ts_yax'][lang], tag=item_id['axes']['timeseries1_yaxis'])
+			# series belong to a y axis
+			dpg.add_line_series(list(range(10)), list(np.ones(10)), parent=item_id['axes']['timeseries1_yaxis'], tag=item_id['line_series']['timeseries1'])
+			dpg.set_axis_limits(item_id['axes']['timeseries1_yaxis'], y_min, y_max)
+			dpg.set_axis_limits(item_id['axes']['timeseries1_xaxis'], -5, 0)
 
-				# series belong to a y axis
-				dpg.add_line_series(list(range(10)), list(np.ones(10)), parent=item_id['axes']['timeseries1_yaxis'], tag=item_id['line_series']['timeseries1'])
-				dpg.set_axis_limits(item_id['axes']['timeseries1_yaxis'], y_min, y_max)
-				dpg.set_axis_limits(item_id['axes']['timeseries1_xaxis'], -5, 0)
+		with dpg.plot(label=labels['p2_ts_title'][lang], tag=item_id['plots']['timeseries2'], anti_aliased=True):
+			# REQUIRED: create x and y axes
+			dpg.add_plot_axis(dpg.mvXAxis, label=labels['ts_xax'][lang], tag=item_id['axes']['timeseries2_xaxis'], no_gridlines=True)
+			dpg.add_plot_axis(dpg.mvYAxis, label=labels['ts_yax'][lang], tag=item_id['axes']['timeseries2_yaxis'], no_gridlines=True)
 
-			with dpg.plot(label=labels['p2_ts_title'][lang], width=width, height=height, anti_aliased=True, tag=item_id['plots']['timeseries2']):
-				# optionally create legend
-				dpg.add_plot_legend()
-
-				# REQUIRED: create x and y axes
-				dpg.add_plot_axis(dpg.mvXAxis, label=labels['ts_xax'][lang], tag=item_id['axes']['timeseries2_xaxis'])
-				dpg.add_plot_axis(dpg.mvYAxis, label=labels['ts_yax'][lang], tag=item_id['axes']['timeseries2_yaxis'])
-
-				# series belong to a y axis
-				dpg.add_line_series(list(range(10)), list(np.ones(10)), parent=item_id['axes']['timeseries2_yaxis'], tag=item_id['line_series']['timeseries2'])
-				dpg.set_axis_limits(item_id['axes']['timeseries2_yaxis'], y_min, y_max)
-				dpg.set_axis_limits(item_id['axes']['timeseries2_xaxis'], -5, 0)
-# ---
-			"""
-			with dpg.plot(label="Bar Series", height=400, width=-1):
-
-				dpg.add_plot_legend()
-
-				# create x axis
-				dpg.add_plot_axis(dpg.mvXAxis, label="Student", no_gridlines=True)
-				dpg.set_axis_limits(dpg.last_item(), 9, 33)
-				dpg.set_axis_ticks(dpg.last_item(), (("S1", 11), ("S2", 21), ("S3", 31)))
+			# series belong to a y axis
+			dpg.add_line_series(list(range(10)), list(np.ones(10)), parent=item_id['axes']['timeseries2_yaxis'], tag=item_id['line_series']['timeseries2'])
+			dpg.set_axis_limits(item_id['axes']['timeseries2_yaxis'], y_min, y_max)
+			dpg.set_axis_limits(item_id['axes']['timeseries2_xaxis'], -5, 0)
+		
+		# --- BAR SERIES GRAPHS ---
+		# Ticks, initial values, bar widths
+		tick_pos = list(range(5))
+		tick_labels = ['Delta\n1-4Hz', 'Theta\n4-8Hz', 'Alpha\n8-13Hz', '  Beta\n13-30Hz', 'Gamma\n30-50Hz']
+		xticks = tuple(zip(tick_labels, tick_pos))
+		y_init = [1]*5
+		y_min, y_max = 10**-5, 10**2
+		bar_width = 0.85
 	
-				# create y axis
-				with dpg.plot_axis(dpg.mvYAxis, label="Score"):
-					dpg.set_axis_limits(dpg.last_item(), 0, 110)
-					dpg.add_bar_series([10, 20, 30], [100, 75, 90], label="Final Exam", weight=1)
-					dpg.add_bar_series([11, 21, 31], [83, 75, 72], label="Midterm Exam", weight=1)
-					dpg.add_bar_series([12, 22, 32], [42, 68, 23], label="Course Grade", weight=1)		
-			"""
-# ---
-		with dpg.group(horizontal=True):
-			with dpg.plot(label=labels['p1_me_title'][lang], width=width, height=height, anti_aliased=True, tag=item_id['plots']['metric1']):
-				# optionally create legend
-				dpg.add_plot_legend()
+		with dpg.plot(label=labels["p1_br_title"][lang], tag=item_id['plots']['bar1']): # TODO: manual scaling in resize function
+			# create x axis
+			dpg.add_plot_axis(dpg.mvXAxis, tag=item_id['axes']['bar1_xaxis'], no_gridlines=True)
+			dpg.set_axis_limits(dpg.last_item(), tick_pos[0]-bar_width/2-(1-bar_width), tick_pos[-1]+bar_width/2+(1-bar_width) )
+			dpg.set_axis_ticks(dpg.last_item(), xticks)
 
-				# REQUIRED: create x and y axes
-				dpg.add_plot_axis(dpg.mvXAxis, label=labels['me_xax'][lang], tag=item_id['axes']['metric1_xaxis'])
-				dpg.add_plot_axis(dpg.mvYAxis, label=labels['me_yax'][lang], tag=item_id['axes']['metric1_yaxis'])
+			# create y axis
+			with dpg.plot_axis(dpg.mvYAxis, tag=item_id['axes']['bar1_yaxis'], label=labels['br_yax'][lang], log_scale=True):
+				dpg.set_axis_limits(dpg.last_item(), y_min, y_max)
+				for i, (xpos, yval) in enumerate(zip(tick_pos, y_init)):
+					dpg.add_bar_series([xpos], [yval], tag=item_id["bar1_series"][i], weight=bar_width)
 
-				# series belong to a y axis
-				dpg.add_line_series(list(range(10)), list(np.ones(10)), parent=item_id['axes']['metric1_yaxis'], tag=item_id['line_series']['metric1'])
-				dpg.set_axis_limits(item_id['axes']['metric1_yaxis'], -0.005, 1.005)
-				dpg.set_axis_limits(item_id['axes']['metric1_xaxis'], -5, 0)
-			
-			with dpg.plot(label=labels['p2_me_title'][lang], width=width, height=height, anti_aliased=True, tag=item_id['plots']['metric2']):
-				# optionally create legend
-				dpg.add_plot_legend()
+		with dpg.plot(label=labels["p2_br_title"][lang], tag=item_id['plots']['bar2']): # TODO: manual scaling in resize function
+			# create x axis
+			dpg.add_plot_axis(dpg.mvXAxis, tag=item_id['axes']['bar2_xaxis'], no_gridlines=True)
+			dpg.set_axis_limits(dpg.last_item(), tick_pos[0]-bar_width/2-(1-bar_width), tick_pos[-1]+bar_width/2+(1-bar_width) )
+			dpg.set_axis_ticks(dpg.last_item(), xticks)
 
-				# REQUIRED: create x and y axes
-				dpg.add_plot_axis(dpg.mvXAxis, label=labels['me_xax'][lang], tag=item_id['axes']['metric2_xaxis'])
-				dpg.add_plot_axis(dpg.mvYAxis, label=labels['me_yax'][lang], tag=item_id['axes']['metric2_yaxis'])
+			# create y axis
+			with dpg.plot_axis(dpg.mvYAxis, tag=item_id['axes']['bar2_yaxis'], label=labels['br_yax'][lang], log_scale=True):
+				dpg.set_axis_limits(dpg.last_item(), y_min, y_max)
+				for i, (xpos, yval) in enumerate(zip(tick_pos, y_init)):
+					dpg.add_bar_series([xpos], [yval], tag=item_id["bar2_series"][i], weight=bar_width)
 
-				# series belong to a y axis
-				series4 = dpg.add_line_series(list(range(10)), list(np.ones(10)), parent=item_id['axes']['metric2_yaxis'], tag=item_id['line_series']['metric2'])
-				dpg.set_axis_limits(item_id['axes']['metric2_yaxis'], -0.005, 1.005)
-				dpg.set_axis_limits(item_id['axes']['metric2_xaxis'], -5, 0)
+		# -- FOCUS METRIC GRAPHS ---
+		with dpg.plot(label=labels['p1_me_title'][lang], tag=item_id['plots']['metric1'],  anti_aliased=True):
+			# REQUIRED: create x and y axes
+			dpg.add_plot_axis(dpg.mvXAxis, label=labels['me_xax'][lang], tag=item_id['axes']['metric1_xaxis'], no_gridlines=True)
+			dpg.add_plot_axis(dpg.mvYAxis, label=labels['me_yax'][lang], tag=item_id['axes']['metric1_yaxis'], no_gridlines=True)
+
+			# series belong to a y axis
+			dpg.add_line_series(list(range(10)), list(np.ones(10)), parent=item_id['axes']['metric1_yaxis'], tag=item_id['line_series']['metric1'])
+			dpg.set_axis_limits(item_id['axes']['metric1_yaxis'], -0.005, 1.005)
+			dpg.set_axis_limits(item_id['axes']['metric1_xaxis'], -5, 0)
+		
+		with dpg.plot(label=labels['p2_me_title'][lang], tag=item_id['plots']['metric2'],  anti_aliased=True):
+			# REQUIRED: create x and y axes
+			dpg.add_plot_axis(dpg.mvXAxis, label=labels['me_xax'][lang], tag=item_id['axes']['metric2_xaxis'], no_gridlines=True)
+			dpg.add_plot_axis(dpg.mvYAxis, label=labels['me_yax'][lang], tag=item_id['axes']['metric2_yaxis'], no_gridlines=True)
+
+			# series belong to a y axis
+			dpg.add_line_series(list(range(10)), list(np.ones(10)), parent=item_id['axes']['metric2_yaxis'], tag=item_id['line_series']['metric2'])
+			dpg.set_axis_limits(item_id['axes']['metric2_yaxis'], -0.005, 1.005)
+			dpg.set_axis_limits(item_id['axes']['metric2_xaxis'], -5, 0)
 
 	def __create_loading_screen(self):
 		"""Create the loading screen."""
@@ -342,7 +342,7 @@ class GUI:
 		successfully were applied.
 		"""
 		if self.last_working_settings is None:
-			settings = [0] # Defaults: [Synthetic board, ...]
+			settings = [0, ] # Defaults: [Synthetic board, ...]
 		else:
 			settings = self.last_working_settings
 		
@@ -444,20 +444,23 @@ class GUI:
 
 	def window_resize(self):
 		"""Callback on window resize."""
-		xpos = [0, 0, 1, 1]
-		ypos = [0, 1, 0, 1]
-		#btn_height = dpg.get_item_height(btn1)
-		#h = dpg.get_item_height("Time Series") - btn_height - 45
-		h = dpg.get_viewport_client_height()
-		#w = dpg.get_item_width("Time Series") - 40
-		w = dpg.get_viewport_client_width()
-		for i, p in enumerate(item_id['plots'].values()):
-			dpg.set_item_height(p, height=(h-45)//2)
-			dpg.set_item_width(p, width=(w-40)//2)
-			dpg.set_item_pos(p, [(w//2)*xpos[i], (h//2)*ypos[i],])
 
+		h = dpg.get_viewport_client_height()
+		w = dpg.get_viewport_client_width()
+
+		# Plots resizing and repositioning.
+		xpos = [0, 1, 0, 1, 0, 1]
+		ypos = [0, 0, 1, 1, 2, 2]
+		plt_h, plt_w = h//3 - 24/3, w//2 - self.col_width//2 - 16
+		for i, plot in enumerate(item_id['plots'].values()):
+			pos = (plt_w*xpos[i], plt_h*ypos[i])
+			dpg.configure_item(plot, height=plt_h, width=plt_w, pos=pos)
+
+		# Position of flag-buttons and settings button.
 		dpg.configure_item(item_id['buttons']["img_swe_main"], pos=(8, h-124))
 		dpg.configure_item(item_id['buttons']['settings'], pos=(8, h-60))
+		
+		# Call additional functions.
 		self.center_windows()
 		self.resize_welcome_window()
 
@@ -555,6 +558,12 @@ class GUI:
 		dpg.configure_item(item_id['axes']['timeseries1_yaxis'], label=labels['ts_yax'][lang])
 		dpg.configure_item(item_id['axes']['timeseries2_xaxis'], label=labels['ts_xax'][lang])
 		dpg.configure_item(item_id['axes']['timeseries2_yaxis'], label=labels['ts_yax'][lang])
+
+		# Plots - Band Power
+		dpg.configure_item(item_id['plots']['bar1'], label=labels["p1_br_title"][lang])
+		dpg.configure_item(item_id['plots']['bar2'], label=labels["p2_br_title"][lang])
+		dpg.configure_item(item_id['axes']['bar1_yaxis'], label=labels['br_yax'][lang])
+		dpg.configure_item(item_id['axes']['bar2_yaxis'], label=labels['br_yax'][lang])
 	
 		# Plots - Focus Metric
 		dpg.configure_item(item_id['plots']['metric1'], label=labels['p1_me_title'][lang])
@@ -661,11 +670,21 @@ class GUI:
 			metric_time1, metric1 = player1['focus_metric']
 			metric_time2, metric2 = player2['focus_metric']
 
+			band_power1 = player1['band_power']
+			band_power2 = player2['band_power']
+
 			#print("Actions: " + ' '.join(actions) + f"  {metric1[-1]:.5f} {metric2[-1]:.5f}", end='\r')
 			dpg.set_value(item_id['line_series']['timeseries1'], [list(time1), list(timeseries1)])
 			dpg.set_value(item_id['line_series']['timeseries2'], [list(time2), list(timeseries2)])
 			dpg.set_value(item_id['line_series']['metric1'], [list(metric_time1), list(metric1)])
 			dpg.set_value(item_id['line_series']['metric2'], [list(metric_time2), list(metric2)])
+
+			# Update bar graphs with power band data.
+			for i, (xpos, yval) in enumerate(zip(range(5), band_power1)):
+				dpg.set_value(item_id["bar1_series"][i], ([xpos],[yval]))
+			for i, (xpos, yval) in enumerate(zip(range(5), band_power2)):
+				dpg.set_value(item_id["bar2_series"][i], ([xpos],[yval]))
+
 
 
 def add_and_load_image_button(image_path, parent=None, callback=None):
