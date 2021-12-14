@@ -22,8 +22,8 @@ programName = 'BrainGame Curiosum'
 fps = -1
 lastTime = time.time()
 
-from KeytestStyrning import *
-Labyrint = LabyrintStyrning()
+from Labyrinth import *
+Labyrint = Labyrinth("COM4")
 class BlitManager:
 	def __init__(self, canvas, animated_artists=()):
 		"""
