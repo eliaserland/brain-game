@@ -70,6 +70,8 @@ item_id = {
 		"loading": dpg.generate_uuid(),
 		"title_game": dpg.generate_uuid(),
 		'info_game': dpg.generate_uuid(),
+		'p1_status': dpg.generate_uuid(),
+		'p2_status': dpg.generate_uuid(),
 	},
 	"registry": {
 		"enter_key": dpg.generate_uuid(),
@@ -82,7 +84,15 @@ item_id = {
 	},
 	"indicator": {
 		"settings_loading": dpg.generate_uuid(),
-	}
+	},
+	"textures": {
+		"spritesheet": dpg.generate_uuid(),
+	},
+	"images": {
+		"p1_icon": dpg.generate_uuid(),
+		"p2_icon": dpg.generate_uuid(),
+	}, 
+	"drawlist": dpg.generate_uuid(),
 }
 
 # All descriptive texts in the game, in swedish and english.
@@ -215,6 +225,33 @@ labels = {
 		"eng": "Copyright by Alfons Edbom Devall, Alfred Leimar, Elsa Magnusson, Elias Olofsson, Jacob Persson & Jennica Sandberg",
 		"swe": "Copyright av Alfons Edbom Devall, Alfred Leimar, Elsa Magnusson, Elias Olofsson, Jacob Persson & Jennica Sandberg",
 	},
-
+	"status_paused": {
+		"eng": "Stopped",
+		"swe": "Stannad",
+	},
+	"status_wait": {
+		"eng": "Running...",
+		"swe": "Kör...",
+	},
+	"status_detected": {
+		"eng": "Peak Detected!",
+		"swe": "Topp detekterad!",
+	},
+	"status_left": {
+		"eng": "Turning left...",
+		"swe": "Roterar vänster...",
+	},
+	"status_right": {
+		"eng": "Turning right...",
+		"swe": "Roterar höger...",
+	},
+	"status_forward": {
+		"eng": "Turning forwards...",
+		"swe": "Roterar framåt...",
+	},
+	"status_backward": {
+		"eng": "Turning backwards...",
+		"swe": "Roterar bakåt...",
+	},
 }
 

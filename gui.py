@@ -30,7 +30,14 @@ class GUI:
 		self.settings_are_applied = False
 		self.have_shown_help_dialogue = False
 		self.welcome_screen_visible = True
-		self.init_time = time.time() 
+		self.init_time = time.time()
+		self.start_time = 0
+		self.stop_time = 1
+		self.p1_time = 0
+		self.p2_time = 0
+		self.flags = [[True, False, False], [True, False, False]]
+		self.p1_last_action = ""
+		self.p2_last_action = ""
 		
 		# Create and initialize all GUI windows.
 		self.__create_welcome_window()
@@ -215,6 +222,22 @@ class GUI:
 			dpg.set_axis_limits(item_id['axes']['metric2_yaxis'], -0.005, 1.005)
 			dpg.set_axis_limits(item_id['axes']['metric2_xaxis'], -5, 0)
 
+		# --- STATUS INDICATORS ---
+		# Status text at bottom of the main game screen
+		dpg.add_text(labels['status_paused'][lang], pos=(0,0), tag=item_id['text']['p1_status'])
+		dpg.add_text(labels['status_paused'][lang], pos=(0,0), tag=item_id['text']['p2_status'])
+		dpg.bind_item_font(item_id['text']['p1_status'], fonts.medium_font)
+		dpg.bind_item_font(item_id['text']['p2_status'], fonts.medium_font)
+
+		# Animated status icons
+		width, height, channels, data = dpg.load_image(os.path.join(basepath, "spritesheet_3by28.png"))
+		with dpg.texture_registry():
+			dpg.add_static_texture(width, height, data, tag=item_id['textures']['spritesheet'])
+		with dpg.drawlist(tag=item_id['drawlist'], width=100, height=100):
+			dpg.draw_image(item_id['textures']['spritesheet'], (0, 0), (100, 100), uv_min=(13/28, 0), uv_max=(14/28, 1/3), tag=item_id['images']['p1_icon'], show=True)
+			dpg.draw_image(item_id['textures']['spritesheet'], (0, 0), (100, 100), uv_min=(13/28, 0), uv_max=(14/28, 1/3), tag=item_id['images']['p2_icon'], show=True)
+		
+
 	def __create_loading_screen(self):
 		"""Create the loading screen."""
 		# Create the window. Initially hidden.
@@ -243,7 +266,7 @@ class GUI:
 		                modal=True, show=False, no_close=True, no_move=True, no_resize=True, no_collapse=True):
 			# Create drop-down menu for Board-ID selector:
 			all_boards = BoardIds._member_names_
-			combo1 = dpg.add_combo(all_boards, label=labels['sett_boardid'][lang], default_value=all_boards[2], tag=item_id['combos']['board_id'])
+			dpg.add_combo(all_boards, label=labels['sett_boardid'][lang], default_value=all_boards[2], tag=item_id['combos']['board_id'])
 
 			# Create bottom row of buttons: OK, Reset & Cancel.
 			dpg.add_spacer(height=10)
@@ -269,7 +292,111 @@ class GUI:
 			t = time.time() - self.init_time
 			opacity = int(128*np.sin(3*t) + 128) # In range [0, 256)
 			dpg.configure_item(item_id['text']['enter_key'], color=(255, 255, 255, opacity))
-	
+		else:
+			# Helper functions related to the animation of the two status icons.
+			def softstep(x: float, alpha: float=1):
+				return np.maximum(0, np.minimum(alpha*x, 1))
+
+			def stop_animation(dt: float, duration: float=0.3, num_frames: int=28):
+				idx = np.floor(0.5*softstep(dt, alpha=1/duration)*num_frames)
+				return (idx/num_frames, 0), ((idx+1)/num_frames, 1/3)
+			
+			def start_animation(dt: float, duration: float=0.3, num_frames: int=28):
+				idx = np.floor(0.5*(1-softstep(dt, alpha=1/duration))*num_frames)
+				return (idx/num_frames, 0), ((idx+1)/num_frames, 1/3)
+
+			def checkmark_animation(dt: float, duration: float=1.25, num_frames:int=28):
+				idx = np.floor(softstep(dt, alpha=1/duration)*num_frames)
+				return idx/num_frames, (idx+1)/num_frames
+			
+			def cogwheel_animation(dt: float, duration: float=2.5, num_frames: int=28):
+				idx = np.floor(softstep(dt, alpha=1/duration)*2*num_frames) % num_frames
+				return idx/num_frames, (idx+1)/num_frames
+
+			def action_animation(dt: float, player: int, status_id: str, status_dir: str):
+				checkmark_duration = 1.25 # in seconds
+				cogwheel_duration = 2 # in seconds
+				if dt < checkmark_duration:
+					# Play the checkmark animation
+					u_min, u_max = checkmark_animation(dt, duration=checkmark_duration)
+					v_min, v_max = 1/3, 2/3
+					if self.flags[player][0]:
+						self.flags[player][0] = False
+						self.flags[player][1] = True
+						dpg.configure_item(item_id['text'][status_id], default_value=labels['status_detected'][lang])
+				elif dt-checkmark_duration < cogwheel_duration:
+					# Play cogwheel animation
+					u_min, u_max = cogwheel_animation(dt-checkmark_duration, duration=cogwheel_duration)
+					v_min, v_max = 2/3, 1
+					if self.flags[player][1]:
+						self.flags[player][1] = False
+						self.flags[player][2] = True 
+						dpg.configure_item(item_id['text'][status_id], default_value=labels[status_dir][lang])
+				else:
+					# Display the static "play" icon
+					u_min, u_max = 0, 1/28
+					v_min, v_max = 0, 1/3
+					if self.flags[player][2]:
+						self.flags[player][2] = False
+						self.flags[player][0] = True
+						dpg.configure_item(item_id['text'][status_id], default_value=labels['status_wait'][lang])
+				return (u_min, v_min), (u_max, v_max)
+
+			now = time.time()
+			time_newest_event = np.max([self.start_time, self.stop_time, self.p1_time, self.p2_time])
+			if now-time_newest_event < 15:
+				if self.stop_time > np.max([self.start_time, self.p1_time, self.p2_time]):
+					# Stop animation
+					uv_min_p1, uv_max_p1 = stop_animation(now-self.stop_time)
+					uv_min_p2, uv_max_p2 = uv_min_p1, uv_max_p1
+				elif self.start_time > np.max([self.p1_time, self.p2_time]):
+					# Start animation
+					uv_min_p1, uv_max_p1 = start_animation(now-self.start_time)
+					uv_min_p2, uv_max_p2 = uv_min_p1, uv_max_p1
+				else:
+					# Action animation player 1 & 2
+					uv_min_p1, uv_max_p1 = action_animation(now-self.p1_time, player=0, status_id="p1_status", status_dir=self.p1_last_action)
+					uv_min_p2, uv_max_p2 = action_animation(now-self.p2_time, player=1, status_id="p2_status", status_dir=self.p2_last_action)
+
+				dpg.configure_item(item_id['images']['p1_icon'], uv_min=uv_min_p1, uv_max=uv_max_p1)
+				dpg.configure_item(item_id['images']['p2_icon'], uv_min=uv_min_p2, uv_max=uv_max_p2)
+
+	def trigger_start_animation(self):
+		"""
+		Trigger the "start" animation sequence for the two status icons.
+		"""
+		self.start_time = time.time()
+		dpg.configure_item(item_id['text']['p1_status'], default_value=labels['status_wait'][lang])
+		dpg.configure_item(item_id['text']['p2_status'], default_value=labels['status_wait'][lang])
+
+	def trigger_stop_animation(self):
+		"""
+		Trigger the "stop" animation sequence for the two status icons. 
+		"""
+		self.stop_time = time.time()
+		dpg.configure_item(item_id['text']['p1_status'], default_value=labels['status_paused'][lang])
+		dpg.configure_item(item_id['text']['p2_status'], default_value=labels['status_paused'][lang])
+
+	def trigger_action_animation(self, player: int, direction: int):
+		"""
+		Trigger animation sequence for one of the two status icons, in the
+		specified direction.
+		"""
+		p1_actions = ["status_left", "status_right"]
+		p2_actions = ["status_forward", "status_backward"]
+		if player == 0:
+			self.p1_last_action = p1_actions[direction]
+			self.p1_time = time.time()
+		elif player == 1:
+			self.p2_last_action = p2_actions[direction]
+			self.p2_time = time.time()
+		else:
+			raise BaseException
+
+#self.trigger_action_animation(1, 0) # TODO: USE THIS SOMEWHERE
+
+
+
 	def callback_enter_game(self):
 		"""
 		Callback function used to transition from the welcome screen to the main 
@@ -448,18 +575,33 @@ class GUI:
 		h = dpg.get_viewport_client_height()
 		w = dpg.get_viewport_client_width()
 
-		# Plots resizing and repositioning.
+		# Resizing and repositioning of the plots.
 		xpos = [0, 1, 0, 1, 0, 1]
 		ypos = [0, 0, 1, 1, 2, 2]
-		plt_h, plt_w = h//3 - 24/3, w//2 - self.col_width//2 - 16
+		plt_h, plt_w = h//3.3 - 24/3, w//2 - self.col_width//2 - 16 
 		for i, plot in enumerate(item_id['plots'].values()):
 			pos = (plt_w*xpos[i], plt_h*ypos[i])
 			dpg.configure_item(plot, height=plt_h, width=plt_w, pos=pos)
 
-		# Position of flag-buttons and settings button.
+		# Position of flag-buttons and settings-button.
 		dpg.configure_item(item_id['buttons']["img_swe_main"], pos=(8, h-124))
 		dpg.configure_item(item_id['buttons']['settings'], pos=(8, h-60))
 		
+		# Position and scaling of the animated icons.
+		status_h, status_w = int(h-3*plt_h+24), int(2*plt_w) # Size of entire bottom "stripe" area for status indicators
+		icon_w = int(0.4*status_h)
+		y_offset = -5
+		x_offset = -60
+		# Canvas to draw the icons on
+		dpg.configure_item(item_id['drawlist'], width=w-self.col_width-40, height=h-32) 
+		# Animated icons:
+		dpg.configure_item(item_id['images']['p1_icon'], pmin=(status_w/4-icon_w/2+x_offset, h-status_h/2-icon_w/2+y_offset), pmax=(status_w/4+icon_w/2+x_offset, h-status_h/2+icon_w/2+y_offset))
+		dpg.configure_item(item_id['images']['p2_icon'], pmin=(status_w*3/4-icon_w/2+x_offset, h-status_h/2-icon_w/2+y_offset), pmax=(status_w*3/4+icon_w/2+x_offset, h-status_h/2+icon_w/2+y_offset))
+		# Status text at the bottom of the screen
+		relx_offset = 30
+		dpg.configure_item(item_id['text']['p1_status'], pos=(status_w/4+icon_w/2+x_offset+relx_offset, h-status_h/2-14))
+		dpg.configure_item(item_id['text']['p2_status'], pos=(status_w*3/4+icon_w/2+x_offset+relx_offset, h-status_h/2-14))
+
 		# Call additional functions.
 		self.center_windows()
 		self.resize_welcome_window()
@@ -573,6 +715,14 @@ class GUI:
 		dpg.configure_item(item_id['axes']['metric2_xaxis'], label=labels['me_xax'][lang])
 		dpg.configure_item(item_id['axes']['metric2_yaxis'], label=labels['me_yax'][lang])
 
+		# Status text
+		if self.game_is_running:
+			dpg.configure_item(item_id['text']['p1_status'], default_value=labels['status_wait'][lang])
+			dpg.configure_item(item_id['text']['p2_status'], default_value=labels['status_wait'][lang])
+		else:
+			dpg.configure_item(item_id['text']['p1_status'], default_value=labels['status_paused'][lang])
+			dpg.configure_item(item_id['text']['p2_status'], default_value=labels['status_paused'][lang])
+
 		# Help dialogue
 		dpg.configure_item(item_id['windows']['help_dialogue'], label=labels['help_title'][lang])
 		dpg.configure_item(item_id['text']['help'], default_value=labels['help_text'][lang])
@@ -619,6 +769,8 @@ class GUI:
 				dpg.bind_item_theme(item_id['buttons']['start_stop'], item_id['theme']['stop_red'])
 				# Toggle start/stop state.
 				toggle_state = not toggle_state
+				# Start animation of status icon
+				self.trigger_start_animation()
 			except BaseException:
 				logging.warning('Exception', exc_info=True)
 				self.game_is_running = False
@@ -641,6 +793,8 @@ class GUI:
 			dpg.bind_item_theme(item_id['buttons']['start_stop'], item_id['theme']['start_green'])
 			# Toggle start/stop state.
 			toggle_state = not toggle_state
+			# Stop animation of status icon.
+			self.trigger_stop_animation()
 		else:
 			logging.info("GUI: No game is running")
 
