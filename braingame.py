@@ -394,7 +394,7 @@ class BrainGameInterface:
 		self.serial_port_tmp = self.params.serial_port
 		# Preallocation for BoardShim, GameLogic and game flag.
 		self.board_shim = None
-		self.game = None
+		self.gamelogic = None
 		self.game_is_running = False
 		self.previous_data = None
 
@@ -464,12 +464,14 @@ class BrainGameInterface:
 		self.active_channels_tmp = active_channels
 		logging.info(f"Active channels set: active_channels={active_channels}")
 
-	def start_game(self, return_data: DataContainer, fresh_start=True):
+	def start_game(self, init_data ):
 		"""Start the main game."""
 		if self.game_is_running:
 			print("Start game: Game is already started")
 			return
-		self.return_data = return_data
+		
+		#self.return_data = return_data
+
 		# Verify that a session is prepared.
 		if self.board_shim is None or not self.board_shim.is_prepared():
 			logging.info("Start game: Need apply settings first")
@@ -486,18 +488,17 @@ class BrainGameInterface:
 			else:
 				init_data = self.previous_data
 				old_quantities = self.previous_quantities
-			self.game = GameLogic(self.board_shim, self.active_channels, init_data, old_quantities)
+			self.gamelogic = GameLogic(self.board_shim, self.active_channels, init_data, old_quantities)
 			logging.info("Start game: Game logic created")
 		
 			# Start threading
 			self.game_is_running = True
-			self.game_thread = threading.Thread(target=self.__game_update_loop, daemon=False)
-			self.game_thread.start()
-			logging.info("Start game: Game started")
+			#self.game_thread = threading.Thread(target=self.__game_update_loop, daemon=False)
+			#self.game_thread.start()
+			#logging.info("Start game: Game started")
 
 			# TODO: Start motor control loop.
-			self.motor_control = Action()
-
+			self.motor_control = Action() # TODO: FIX THIS BULLSHIT
 
 
 		except BaseException: 
@@ -506,19 +507,24 @@ class BrainGameInterface:
 			self.stop_game()
 			raise Exception("Could not start game logic loop")
 			
+	def update_game(self) -> Any:
+		"""Update the gamelogic one step"""
+		# Update game logic one step, collect game info.
+		quantities, actions, data = self.gamelogic.update()
+		return quantities, actions, data
 
-	def __game_update_loop(self):
-		"""Main thread function for game logic loop."""
-		while self.game_is_running:
-			# Update game logic one step, collect game info.
-			quantities, actions, data = self.game.update()
-			# Send game info to GUI for plotting.
-			self.return_data.put((quantities, actions))
-		
-		# At end, save last game state for next session.
-		self.previous_data = data
-		self.previous_quantities = quantities
-		self.previous_actions = actions
+	#def __game_update_loop(self):
+	#	"""Main thread function for game logic loop."""
+	#	while self.game_is_running:
+	#		# Update game logic one step, collect game info.
+	#		quantities, actions, data = self.gamelogic.update()
+	#		# Send game info to GUI for plotting.
+	#		self.return_data.put((quantities, actions))
+	#	
+	#	# At end, save last game state for next session.
+	#	self.previous_data = data
+	#	self.previous_quantities = quantities
+	#	self.previous_actions = actions
 
 	def stop_game(self):
 		"""Stop the main game."""
@@ -530,8 +536,8 @@ class BrainGameInterface:
 			self.game_thread.join()
 			logging.info("Stop game: Game logic stopped")
 			# Clean up game logic
-			self.game.destroy()
-			self.game = None
+			self.gamelogic.destroy()
+			self.gamelogic = None
 			logging.info("Stop game: Game logic destroyed")
 
 			# TODO: Stop motor control loop.

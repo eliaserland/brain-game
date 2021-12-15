@@ -25,8 +25,8 @@ class GUI:
 	def __init__(self) -> None:
 		"""Creates and initializes all windows for the graphical user interface."""
 		# Create an instance of the main game.
-		self.game = braingame.BrainGameInterface()
-		self.game_is_running = False
+		self.braingame = braingame.BrainGameInterface()
+		self.braingame_is_running = False
 		self.settings_are_applied = False
 		self.have_shown_help_dialogue = False
 		self.welcome_screen_visible = True
@@ -49,7 +49,7 @@ class GUI:
 		# Set global callbacks.
 		dpg.set_frame_callback(frame=1, callback=self.__startup_settings) # Executes on first frame.
 		dpg.set_viewport_resize_callback(callback=self.window_resize) # Executes on window resize.
-		dpg.set_exit_callback(callback=self.callback_stop_game) # Executes on program window exit.
+		dpg.set_exit_callback(callback=self.callback_stop_game) # Executes on program window exit.		
 
 		# Global key binds: Fullscreen mode: toggle on F11, toggle on mouse double click, exit on escape-key.
 		with dpg.handler_registry():
@@ -120,19 +120,19 @@ class GUI:
 					# Settings button.
 					dpg.add_button(label=labels['settings_btn'][lang], width=btn_width, height=btn_h2, tag=item_id['buttons']['settings'], callback=self.callback_show_settings_menu)
 				# Set fonts.
-				dpg.bind_item_font(item_id['text']['title_game'], fonts.large_bold) #fonts.large_font
+				dpg.bind_item_font(item_id['text']['title_game'], fonts.large_bold)
 				dpg.bind_item_font(item_id['text']['info_game'], fonts.intermediate_font)
 				
 				# Green theme for the start/stop button.
 				with dpg.theme(tag=item_id['theme']['start_green']):
 					with dpg.theme_component(dpg.mvButton): 
-						dpg.add_theme_color(dpg.mvThemeCol_Button, (25, 105, 47)) #(38, 128, 62)
+						dpg.add_theme_color(dpg.mvThemeCol_Button, (25, 105, 47))
 						dpg.add_theme_color(dpg.mvThemeCol_ButtonHovered, (50, 168, 82))
 						dpg.add_theme_color(dpg.mvThemeCol_ButtonActive, (49, 181, 85))
 				# Red theme for the start/stop button.
 				with dpg.theme(tag=item_id['theme']['stop_red']):
 					with dpg.theme_component(dpg.mvButton): 
-						dpg.add_theme_color(dpg.mvThemeCol_Button, (145, 10, 10)) #(38, 128, 62)
+						dpg.add_theme_color(dpg.mvThemeCol_Button, (145, 10, 10))
 						dpg.add_theme_color(dpg.mvThemeCol_ButtonHovered, (179, 16, 16))
 						dpg.add_theme_color(dpg.mvThemeCol_ButtonActive, (194, 17, 17))
 				# Set initial theme of start/stop button.
@@ -455,7 +455,7 @@ class GUI:
 		# Retrieve board ID string, parse it to an integer and send it to the boardshim.
 		board_name = dpg.get_value(item_id['combos']['board_id'])
 		board_id = BoardIds[board_name].value
-		self.game.callback_set_board_id(board_id)
+		self.braingame.callback_set_board_id(board_id)
 
 		# Collect all settings sent to the board.
 		settings = [board_id]
@@ -530,7 +530,7 @@ class GUI:
 		# Propagate settings from the GUI to the boardshim. Let the boardshim attempt
 		# to apply the settings and retrieve the status.
 		settings_candidate = self.propagate_settings()
-		status = self.game.callback_apply_settings()
+		status = self.braingame.callback_apply_settings()
 		if status:
 			# Settings were loaded successfully.
 			dpg.configure_item(item_id['text']['loading'], default_value=labels['loading_success'][lang])
@@ -675,7 +675,7 @@ class GUI:
 		lang = language # Set the global language
 
 		# Set start/stop button.
-		if self.game_is_running:
+		if self.braingame_is_running:
 			dpg.configure_item(item_id['buttons']['start_stop'], label=labels['stop_btn'][lang])
 		else: 
 			dpg.configure_item(item_id['buttons']['start_stop'], label=labels['start_btn'][lang])
@@ -716,7 +716,7 @@ class GUI:
 		dpg.configure_item(item_id['axes']['metric2_yaxis'], label=labels['me_yax'][lang])
 
 		# Status text
-		if self.game_is_running:
+		if self.braingame_is_running:
 			dpg.configure_item(item_id['text']['p1_status'], default_value=labels['status_wait'][lang])
 			dpg.configure_item(item_id['text']['p2_status'], default_value=labels['status_wait'][lang])
 		else:
@@ -753,62 +753,40 @@ class GUI:
 	def callback_start_game(self) -> None:
 		"""Callback to start a new game."""
 		global toggle_state
-		if not self.game_is_running:
+		if not self.braingame_is_running:
 			try:
 				logging.info("GUI: Starting game")
 				# Create a container used for housing return data from game loop.
 				self.data = DataContainer()
 				# Start the main game loop.
-				self.game.start_game(self.data)
+				self.braingame.start_game(self.data)
 				# Set flag & start gui plotting thread
-				self.game_is_running = True
+				self.braingame_is_running = True
 				self.thread = threading.Thread(target=self.__gui_loop, daemon=False)
 				self.thread.start()
+
+				#-----
 				# Set theme of start/stop button
 				dpg.configure_item(item_id['buttons']['start_stop'], label=labels['stop_btn'][lang])
 				dpg.bind_item_theme(item_id['buttons']['start_stop'], item_id['theme']['stop_red'])
 				# Toggle start/stop state.
 				toggle_state = not toggle_state
-				# Start animation of status icon
+				# "Start"-animation of status icon
 				self.trigger_start_animation()
+				#----
+
 			except BaseException:
 				logging.warning('Exception', exc_info=True)
-				self.game_is_running = False
+				self.braingame_is_running = False
 				self.callback_stop_game()
 
 		else:
 			logging.info("GUI: callback_start_game: Game is already running")
 
-	def callback_stop_game(self, reset_game=False) -> None:
-		"""Callback to stop and end a running game."""
-		global toggle_state
-		if self.game_is_running:
-			logging.info("GUI: Stopping game")
-			self.game_is_running = False
-			self.game.stop_game()
-			self.data.destroy()
-			self.thread.join()
-			# Set theme of start/stop button
-			dpg.configure_item(item_id['buttons']['start_stop'], label=labels['start_btn'][lang])
-			dpg.bind_item_theme(item_id['buttons']['start_stop'], item_id['theme']['start_green'])
-			# Toggle start/stop state.
-			toggle_state = not toggle_state
-			# Stop animation of status icon.
-			self.trigger_stop_animation()
-		else:
-			logging.info("GUI: No game is running")
-
-
-	def callback_timeseries_settings(self):
-		pass
-
-	def callback_focus_settings(self):
-		pass
-
 	def __gui_loop(self):
 		"""Main thread function for updating the GUI plots during a game."""
 		fps_timer = FPS()
-		while self.game_is_running:
+		while self.braingame_is_running:
 			# Get data from game logic, update graphs.
 			return_data = self.data.get()
 			
@@ -816,7 +794,29 @@ class GUI:
 			# Print fps counter
 			fps = fps_timer.calc()
 			print(f"FPS: {fps:.3f}", end='\r')
-	
+
+	def callback_stop_game(self, reset_game=False) -> None:
+		"""Callback to stop and end a running game."""
+		global toggle_state
+		if self.braingame_is_running:
+			logging.info("GUI: Stopping game")
+			self.braingame_is_running = False
+			self.braingame.stop_game()
+			self.data.destroy()
+			self.thread.join()
+
+			#----
+			# Set theme of start/stop button
+			dpg.configure_item(item_id['buttons']['start_stop'], label=labels['start_btn'][lang])
+			dpg.bind_item_theme(item_id['buttons']['start_stop'], item_id['theme']['start_green'])
+			# Toggle start/stop state.
+			toggle_state = not toggle_state
+			# "Stop"-animation of status icon.
+			self.trigger_stop_animation()
+			#----
+		else:
+			logging.info("GUI: No game is running")
+
 	def __update_plots(self, data):
 			(player1, player2), actions = data
 			time1, timeseries1 = player1['time_series']
@@ -839,6 +839,12 @@ class GUI:
 			for i, (xpos, yval) in enumerate(zip(range(5), band_power2)):
 				dpg.set_value(item_id["bar2_series"][i], ([xpos],[yval]))
 
+
+	def callback_timeseries_settings(self):
+		pass
+
+	def callback_focus_settings(self):
+		pass
 
 
 def add_and_load_image_button(image_path, parent=None, callback=None):
