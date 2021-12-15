@@ -8,7 +8,6 @@ import dearpygui.dearpygui as dpg
 from brainflow.board_shim import BoardIds
 
 import braingame
-from datacontainer import DataContainer
 from definitions import item_id, labels
 from util import FPS, serial_ports
 from dpg_util import *
@@ -49,7 +48,7 @@ class GUI:
 		# Set global callbacks.
 		dpg.set_frame_callback(frame=1, callback=self.__startup_settings) # Executes on first frame.
 		dpg.set_viewport_resize_callback(callback=self.window_resize) # Executes on window resize.
-		dpg.set_exit_callback(callback=self.callback_stop_game) # Executes on program window exit.		
+		dpg.set_exit_callback(callback=self.callback_quit_program) # Executes on program window exit.		
 
 		# Global key binds: Fullscreen mode: toggle on F11, toggle on mouse double click, exit on escape-key.
 		with dpg.handler_registry():
@@ -756,11 +755,9 @@ class GUI:
 		if not self.braingame_is_running:
 			try:
 				logging.info("GUI: Starting game")
-				# Create a container used for housing return data from game loop.
-				self.data = DataContainer()
-				# Start the main game loop.
-				self.braingame.start_game(self.data)
-				# Set flag & start gui plotting thread
+				# Start the main game.
+				self.braingame.start_game(fresh_start=False)
+				# Set flag & start the gui plotting thread.
 				self.braingame_is_running = True
 				self.thread = threading.Thread(target=self.__gui_loop, daemon=False)
 				self.thread.start()
@@ -787,10 +784,10 @@ class GUI:
 		"""Main thread function for updating the GUI plots during a game."""
 		fps_timer = FPS()
 		while self.braingame_is_running:
-			# Get data from game logic, update graphs.
-			return_data = self.data.get()
+			# Increment game logic, get data and update graphs.
+			quantities, actions, data  = self.braingame.update_game()
+			self.__update_plots((quantities, actions))
 			
-			self.__update_plots(return_data)
 			# Print fps counter
 			fps = fps_timer.calc()
 			print(f"FPS: {fps:.3f}", end='\r')
@@ -801,10 +798,8 @@ class GUI:
 		if self.braingame_is_running:
 			logging.info("GUI: Stopping game")
 			self.braingame_is_running = False
-			self.braingame.stop_game()
-			self.data.destroy()
 			self.thread.join()
-
+			self.braingame.stop_game()
 			#----
 			# Set theme of start/stop button
 			dpg.configure_item(item_id['buttons']['start_stop'], label=labels['start_btn'][lang])
@@ -816,6 +811,10 @@ class GUI:
 			#----
 		else:
 			logging.info("GUI: No game is running")
+
+	def callback_quit_program(self):
+		self.callback_stop_game()
+		self.braingame.quit_game()
 
 	def __update_plots(self, data):
 			(player1, player2), actions = data
@@ -838,7 +837,6 @@ class GUI:
 				dpg.set_value(item_id["bar1_series"][i], ([xpos],[yval]))
 			for i, (xpos, yval) in enumerate(zip(range(5), band_power2)):
 				dpg.set_value(item_id["bar2_series"][i], ([xpos],[yval]))
-
 
 	def callback_timeseries_settings(self):
 		pass

@@ -1,17 +1,16 @@
 import argparse
+import queue
 import time
 import logging
 from typing import Any
 import numpy as np
 from collections import deque
 import threading
+import multiprocessing
 
 from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds, BrainFlowError
 from brainflow.data_filter import DataFilter, FilterTypes, AggOperations, NoiseTypes, WindowFunctions, DetrendOperations
 from brainflow.ml_model import BrainFlowMetrics, BrainFlowClassifiers, BrainFlowModelParams, MLModel
-from numpy.lib.function_base import append
-
-from datacontainer import DataContainer
 
 WINDOW_SIZE = 5 # Seconds
 
@@ -251,13 +250,12 @@ class Action:
 		self.p1_actions = ['LEFT', 'RIGHT']
 		self.p2_actions = ['FORWARD', 'BACKWARD']
 
-
-	def perform_actions(self, quantities: list[dict[str, Any]]):
+	def get_actions(self, quantities: list[dict[str, Any]]):
 		p1_action = self._decide(quantities[0]) # TODO: Get threshold from settings.
 		p2_action = self._decide(quantities[1]) # TODO: Get threshold from settings.
 
-		self._act_player1(p1_action)
-		self._act_player2(p1_action)
+		#self._act_player1(p1_action)
+		#self._act_player2(p1_action)
 		
 		actions = [self.p1_actions[p1_action], self.p2_actions[p2_action]]
 		return actions
@@ -270,49 +268,81 @@ class Action:
 		else:
 			return 1
 
-	def _act_player1(self, action: int):
-		"""Wrapper to call external motor control."""
-		if action:
-			pass # Higher than threshold. # TODO: implement this
-		else:
-			pass # Lower than threshold.  # TODO: implement this
+	#def _act_player1(self, action: int):
+	#	"""Wrapper to call external motor control."""
+	#	if action:
+	#		pass # Higher than threshold. # TODO: implement this
+	#	else:
+	#		pass # Lower than threshold.  # TODO: implement this
 
-	def _act_player2(self, action):
-		"""Wrapper to call external motor control."""
-		if action:
-			pass # Higher than threshold. # TODO: implement this
-		else:
-			pass # Lower than threshold.  # TODO: implement this
+	#def _act_player2(self, action):
+	#	"""Wrapper to call external motor control."""
+	#	if action:
+	#		pass # Higher than threshold. # TODO: implement this
+	#	else:
+	#		pass # Lower than threshold.  # TODO: implement this
 
 
-class MotorLogic:
-	def __init__(self) -> None:
-		pass
-		
-
-	def vote(self, quantities: list[dict[str, Any]]):
-		pass
-
-	def start_motor_control(self):
-		self.motors_are_running = True
-		self.motor_thread = threading.Thread(target=self.__motor_update_loop, daemon=False)
-		self.motor_thread.start()
-
-	def stop_motor_control(self):
-		self.motors_are_running = False
-		self.motor_thread.join()
+#class MotorLogic:
+#	def __init__(self) -> None:
+#		pass
+#		# lab = LabyrintStyrning()
+#
+#	def vote(self, quantities: list[dict[str, Any]]):
+#		pass
+#
+#	def start_motor_control(self):
+#		self.motors_are_running = True
+#		self.motor_thread = threading.Thread(target=self.__motor_update_loop, daemon=False)
+#		self.motor_thread.start()
+#
+#	def stop_motor_control(self):
+#		self.motors_are_running = False
+#		self.motor_thread.join()
 	
-	def __motor_update_loop(self):
-		"""Thread function for motor control logic."""
-		while self.motors_are_running:
+#	def __motor_update_loop(self):
+#		"""Thread function for motor control logic."""
+#		while self.motors_are_running:
 			# Wait for queue to be not empty
 
 			# Take item from queue.
 
 			# Send command to motors.
-			pass
+#			pass
 
+def motor_logic(queue: multiprocessing.Queue) -> None:
+	"""Main function to handle interface with servos."""
+	# lab = LabyrintStyrning()
+	while True:
+		# Pick item from the queue.
+		action = queue.get()
+		# Handle certain special cases.
+		if action == "end": # to be called at program exit
+			break
+		if action == "reset": # to be called at braingame.stop_game
+			# TODO: Return to starting configuration.
+			continue
+		# Act according to action.
+		#lab.turn_right(1)
+		#lab.turn_left(1)
+		print(action)
+	
+	# Safely shut down program.
+	#lab.__del__()
 
+"""
+def motor_loop(queue: multiprocessing.Queue):
+	#lab = LabyrintStyrning()
+	while True:
+		action = queue.get()
+		if action == "stop":
+			queue.task_done()
+			break
+		# Act according to action
+		#lab.turn_right(1)
+		#lab.turn_left(1)
+		queue.task_done()
+"""
 
 class GameLogic(Board):
 	"""Class containing and collecting the main game logic."""
@@ -348,7 +378,7 @@ class GameLogic(Board):
 		quantities = (q1, q2)
 
 		# Decide and send actions to arduino.
-		actions = self.act.perform_actions(quantities)
+		actions = self.act.get_actions(quantities)
 
 		# Send derived quantities to GUI for plotting.
 		return quantities, actions, self.data
@@ -428,6 +458,12 @@ class BrainGameInterface:
 			
 			# TODO: Initialize Arduino.
 			
+			self.queue = multiprocessing.Queue()
+			self.motor_process = multiprocessing.Process(target=motor_logic, args=(self.queue,))
+			self.motor_process.start()
+
+			# TODO: CORRECT ERROR CHECKING AND HANDLING OF EXCEPTIONS
+			
 			return True
 
 		except BaseException:
@@ -464,19 +500,15 @@ class BrainGameInterface:
 		self.active_channels_tmp = active_channels
 		logging.info(f"Active channels set: active_channels={active_channels}")
 
-	def start_game(self, init_data ):
+	def start_game(self, fresh_start=True):
 		"""Start the main game."""
 		if self.game_is_running:
 			print("Start game: Game is already started")
 			return
-		
-		#self.return_data = return_data
-
 		# Verify that a session is prepared.
 		if self.board_shim is None or not self.board_shim.is_prepared():
 			logging.info("Start game: Need apply settings first")
 			self.callback_apply_settings()
-			
 		try: 
 			# Start streaming session.
 			self.board_shim.start_stream(450000, self.streamer_params)
@@ -493,25 +525,31 @@ class BrainGameInterface:
 		
 			# Start threading
 			self.game_is_running = True
+			logging.info("Start game: Game started")
+
 			#self.game_thread = threading.Thread(target=self.__game_update_loop, daemon=False)
 			#self.game_thread.start()
-			#logging.info("Start game: Game started")
-
+			
 			# TODO: Start motor control loop.
-			self.motor_control = Action() # TODO: FIX THIS BULLSHIT
-
+			#self.motor_control = Action()
 
 		except BaseException: 
 			# Error handling.
 			logging.warning('Exception', exc_info=True)
 			self.stop_game()
 			raise Exception("Could not start game logic loop")
-			
-	def update_game(self) -> Any:
-		"""Update the gamelogic one step"""
+	
+	def update_game(self):
+		"""Update gamelogic one step."""
 		# Update game logic one step, collect game info.
 		quantities, actions, data = self.gamelogic.update()
-		return quantities, actions, data
+		# Send actions to the motor logic
+		self.queue.put(actions) # TODO: SEND ACTIONS
+		# Save quantities to enable game restarts from old data.
+		self.previous_data = data
+		self.previous_quantities = quantities
+		self.previous_actions = actions
+		return quantities, actions, data 
 
 	#def __game_update_loop(self):
 	#	"""Main thread function for game logic loop."""
@@ -533,7 +571,6 @@ class BrainGameInterface:
 			# Stop game loop.
 			self.game_is_running = False
 			# Join Thread.
-			self.game_thread.join()
 			logging.info("Stop game: Game logic stopped")
 			# Clean up game logic
 			self.gamelogic.destroy()
@@ -552,4 +589,7 @@ class BrainGameInterface:
 				logging.info('Stop game: Board shim released')
 			self.board_shim = None
 			
-		
+	def quit_game(self):
+		self.queue.put("end")
+		self.queue.close()
+		self.motor_process.join()
