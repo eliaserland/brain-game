@@ -1,6 +1,8 @@
 import sys
 import glob
 import serial
+import time
+import numpy as np
 
 def serial_ports():
 	""" Lists serial port names
@@ -30,5 +32,19 @@ def serial_ports():
 			pass
 	return result
 
-if __name__ == '__main__':
-	print(serial_ports())
+class FPS:
+	def __init__(self) -> None:
+		self.fps = -1
+		self.lastTime = time.time()
+	
+	def calc(self) -> float:
+		"""Calculate frames per second."""
+		now = time.time()
+		dt = now - self.lastTime
+		self.lastTime = now
+		if self.fps == -1:
+			self.fps = 1.0/dt
+		else: 
+			s = np.clip(dt*3., 0, 1)
+			self.fps = self.fps * (1-s) + (1.0/dt) * s
+		return self.fps
