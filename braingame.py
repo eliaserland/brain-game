@@ -230,21 +230,25 @@ class FilterData(Board):
 		"""Apply filtering to the current timestep."""
 		# Only filter active channels.
 		for i, channel in enumerate(self.active_channels):
-			pass
 			# Constant detrend, i.e. center data at y = 0
-			#DataFilter.detrend(data[channel], DetrendOperations.CONSTANT.value)
+			DataFilter.detrend(data[channel], DetrendOperations.CONSTANT.value)
+			DataFilter.detrend(data[channel], DetrendOperations.LINEAR.value)
 			# Notch filter, remove 50Hz AC interference.
-			#DataFilter.remove_environmental_noise(data[channel], self.sampling_rate, NoiseTypes.FIFTY)
+			DataFilter.remove_environmental_noise(data[channel], self.sampling_rate, NoiseTypes.FIFTY)
+			
 			# Bandpass filter
+			#DataFilter.perform_wavelet_denoising(data[channel], 'coif3', 3)
+			#DataFilter.perform_rolling_filter(data[channel], 3, AggOperations.MEDIAN.value)
+			DataFilter.perform_rolling_filter(data[channel], 3, AggOperations.MEAN.value)
+			DataFilter.perform_bandpass(data[channel], self.sampling_rate, 40.0, 90.0, 2,
+			                            FilterTypes.BUTTERWORTH.value, 0)
+			DataFilter.perform_highpass(data[channel], self.sampling_rate, 0.1, 2, FilterTypes.BUTTERWORTH.value, 0)
 			#DataFilter.perform_bandpass(data[channel], self.sampling_rate, 51.0, 100.0, 2,
-			#				FilterTypes.BUTTERWORTH.value, 0)
-			#DataFilter.perform_bandpass(data[channel], self.sampling_rate, 51.0, 100.0, 2,
 			#                            FilterTypes.BUTTERWORTH.value, 0)
-			#DataFilter.perform_bandstop(data[channel], self.sampling_rate, 50.0, 4.0, 2,
-			#                            FilterTypes.BUTTERWORTH.value, 0)
-			#DataFilter.perform_bandstop(data[channel], self.sampling_rate, 60.0, 4.0, 2,
-			#                            FilterTypes.BUTTERWORTH.value, 0)
-
+			#DataFilter.perform_bandstop(data[channel], self.sampling_rate, 4, 4.0, 2,
+			#                           FilterTypes.BUTTERWORTH.value, 0)
+			DataFilter.perform_bandstop(data[channel], self.sampling_rate, 100.0, 4.0, 2,
+			                            FilterTypes.BUTTERWORTH.value, 0)
 class Action:
 	def __init__(self) -> None:
 		self.p1_actions = ['LEFT', 'RIGHT']
@@ -301,7 +305,7 @@ class Action:
 #		self.motor_thread.join()
 	
 #	def __motor_update_loop(self):
-#		"""Thread function for motor control logic."""
+#	self.queue	"""Thread function for motor control logic."""
 #		while self.motors_are_running:
 			# Wait for queue to be not empty
 
@@ -325,7 +329,7 @@ def motor_logic(queue: multiprocessing.Queue) -> None:
 		# Act according to action.
 		#lab.turn_right(1)
 		#lab.turn_left(1)
-		print(action)
+		#print(action)
 	
 	# Safely shut down program.
 	#lab.__del__()
@@ -427,6 +431,7 @@ class BrainGameInterface:
 		self.gamelogic = None
 		self.game_is_running = False
 		self.previous_data = None
+		self.queue = None
 
 	def callback_apply_settings(self):
 		"""Apply current settings to the board."""
