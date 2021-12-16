@@ -1,4 +1,4 @@
-from Labyrinth import *
+from labyrinth import *
 import time
 Labyrint = Labyrinth("COM4")
 time.sleep(1)
