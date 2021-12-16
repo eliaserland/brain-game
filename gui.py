@@ -145,7 +145,7 @@ class GUI:
 	
 	def __create_all_graphs(self):
 		"""Create and initialize all plotting graphs of the main game window."""
-		y_min, y_max = -100, 100 # Time series y-axis limits.
+		y_min, y_max = -200, 200 # Time series y-axis limits.
 
 		# --- TIME SERIES GRAPHS ---
 		with dpg.plot(label=labels['p1_ts_title'][lang], tag=item_id['plots']['timeseries1'], anti_aliased=True):
@@ -832,8 +832,8 @@ class GUI:
 			(player1, player2), actions = data
 			time1, timeseries1 = player1['time_series']
 			time2, timeseries2 = player2['time_series']
-			metric_time1, metric1 = player1['focus_metric']
-			metric_time2, metric2 = player2['focus_metric']
+			_, rel_time1, metric1 = player1['focus_metric']
+			_, rel_time2, metric2 = player2['focus_metric']
 
 			band_power1 = player1['band_power']
 			band_power2 = player2['band_power']
@@ -841,8 +841,8 @@ class GUI:
 			#print("Actions: " + ' '.join(actions) + f"  {metric1[-1]:.5f} {metric2[-1]:.5f}", end='\r')
 			dpg.set_value(item_id['line_series']['timeseries1'], [list(time1), list(timeseries1)])
 			dpg.set_value(item_id['line_series']['timeseries2'], [list(time2), list(timeseries2)])
-			dpg.set_value(item_id['line_series']['metric1'], [list(metric_time1), list(metric1)])
-			dpg.set_value(item_id['line_series']['metric2'], [list(metric_time2), list(metric2)])
+			dpg.set_value(item_id['line_series']['metric1'], [list(rel_time1), list(metric1)])
+			dpg.set_value(item_id['line_series']['metric2'], [list(rel_time2), list(metric2)])
 
 			# Update bar graphs with power band data.
 			for i, (xpos, yval) in enumerate(zip(range(5), band_power1)):

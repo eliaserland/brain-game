@@ -182,7 +182,7 @@ class FocusMetric(Board):
 		self.time.append(time)
 
 		relative_time = np.array(self.time)-time
-		return list(relative_time), list(self.metric)
+		return list(self.time), list(relative_time), list(self.metric)
 
 class TimeSeries(Board):
 	"""Class for extracting the time series data for a specific player."""
@@ -202,24 +202,24 @@ class Player:
 	"""Class collecting all player specific logic."""
 	def __init__(self, board_shim: BoardShim, active_channels: list[int], channel: int, old_playerinfo):
 		if old_playerinfo is None:
-			previous_time, previous_metric = (None, None)
+			previous_abs_time, previous_rel_time, previous_metric = (None, None, None)
 		else:
-			previous_time, previous_metric = old_playerinfo['focus_metric']
+			previous_abs_time, previous_rel_time, previous_metric = old_playerinfo['focus_metric']
 		self.timeseries = TimeSeries(board_shim, active_channels, channel)
 		self.bandp = AvgBandPower(board_shim, active_channels, channel)
-		self.focus = FocusMetric(board_shim, active_channels, channel, previous_metric, previous_time)
+		self.focus = FocusMetric(board_shim, active_channels, channel, previous_metric, previous_rel_time)
 
 	def update(self, data: np.ndarray):
 		"""Update derived quantities for the current timestep."""
 		# Calculate all derived quantities, such as band power, focus metric etc.
 		time, timeseries = self.timeseries.get_time_series(data)
 		band_power  = self.bandp.get_band_power(data)
-		metric_time, metric  = self.focus.get_metric(data)
+		abs_time, rel_time, metric  = self.focus.get_metric(data)
 		# Collect all quantities to be plotted in a dictionary.
 		player_info = {
 			'time_series': (time, timeseries),
 			'band_power': band_power,
-			'focus_metric': (metric_time, metric)
+			'focus_metric': (abs_time, rel_time, metric)
 		}
 		return player_info
 
@@ -238,18 +238,35 @@ class FilterData(Board):
 			# Notch filter, remove 50Hz AC interference.
 			DataFilter.remove_environmental_noise(data[channel], self.sampling_rate, NoiseTypes.FIFTY)
 			# Bandpass filter
-			DataFilter.perform_bandpass(data[channel], self.sampling_rate, 30.0, 40.0, 2,
+			DataFilter.perform_bandpass(data[channel], self.sampling_rate, 40.0, 70, 3,
+			                            FilterTypes.BUTTERWORTH.value, 0)
+			DataFilter.perform_bandstop(data[channel], self.sampling_rate, 100.0, 4.0, 3,
+			                            FilterTypes.BUTTERWORTH.value, 0)
+
+			"""
+			# Constant detrend, i.e. center data at y = 0
+			DataFilter.detrend(data[channel], DetrendOperations.CONSTANT.value)
+			DataFilter.detrend(data[channel], DetrendOperations.LINEAR.value)
+			# Notch filter, remove 50Hz AC interference.
+			DataFilter.remove_environmental_noise(data[channel], self.sampling_rate, NoiseTypes.FIFTY)
+			# Bandpass filter
+			DataFilter.perform_bandpass(data[channel], self.sampling_rate, 30.0, 70, 2,
 			                            FilterTypes.BUTTERWORTH.value, 0)
 			DataFilter.perform_bandstop(data[channel], self.sampling_rate, 100.0, 4.0, 2,
 			                            FilterTypes.BUTTERWORTH.value, 0)
+			"""
 class Action:
-	def __init__(self) -> None:
+	def __init__(self, sampling_rate) -> None:
 		self.p1_actions = ['LEFT', 'RIGHT']
 		self.p2_actions = ['FORWARD', 'BACKWARD']
+		self.old_peaks = [[],[]]
+		self.position_1 = 0
+		self.position_2 = 0
+		self.sampling_rate = sampling_rate
 
 	def get_actions(self, quantities: list[dict[str, Any]]):
-		p1_action = self._decide(quantities[0]) # TODO: Get threshold from settings.
-		p2_action = self._decide(quantities[1]) # TODO: Get threshold from settings.
+		p1_action = self._decide(quantities[0], player=0) # TODO: Get threshold from settings.
+		p2_action = self._decide(quantities[1], player=1) # TODO: Get threshold from settings.
 
 		#self._act_player1(p1_action)
 		#self._act_player2(p1_action)
@@ -258,13 +275,12 @@ class Action:
 		return actions
 
 	def _decide(self, quantity: dict[str, Any], player: int):
-		(metric_time, metric) = quantity['focus_metric']
-		peaks, _ = signal.find_peaks(metric, height=0.900, width=65)
-
+		abs_time, _, metric = quantity['focus_metric']
+		peaks, _ = signal.find_peaks(metric, height=0.900, width=150)
 		# For every peak
 		for peak in peaks:
 			if self.old_peaks[player]:
-				t = metric_time[peak]
+				t = abs_time[peak]
 				comparison = np.abs(t - np.array(self.old_peaks[player]))
 				min_dt = np.min(comparison)
 
@@ -274,40 +290,29 @@ class Action:
 					# Ny peak
 					if player == 0: # PLAYER ONE
 						self.old_peaks[player].append(t)
-						print('YES APPEND PLAYER ONE')
 						if self.position_1 == 0:
-							#Labyrint.turn_left(1)
 							self.position_1 = 1
 							return "LEFT"
 						elif self.position_1 == 1:
-							#Labyrint.turn_right(1)
 							self.position_1 = 0
 							return "RIGHT"
 					else: # PLAYER TWO
 						self.old_peaks[player].append(t)
-						print('YES APPEND PLAYER TWO')
 						if self.position_2 == 0:
 							#Labyrint.turn_left(2)
 							self.position_2 = 1
 							return "FORWARD"
 						elif self.position_2 == 1:
-							#Labyrint.turn_right(2)
 							self.position_2 = 0
 							return "BACKWARD"
 			else:
 				# First peak
 				if player == 0:
-					self.old_peaks[player].append(metric_time[peak])
-					#print("OLD PEAKS OG = ",self.old_peaks)
-					print("OG APPEND PLAYER ONE")
-					#Labyrint.turn_right(1)
+					self.old_peaks[player].append(abs_time[peak])
 					self.position_1 = 0
 					return "RIGHT"
 				else:
-					self.old_peaks[player].append(metric_time[peak])
-					#print("OLD PEAKS OG = ",self.old_peaks)
-					print("OG APPEND PLAYER TWO")
-					#Labyrint.turn_right(2)
+					self.old_peaks[player].append(abs_time[peak])
 					self.position_2 = 0
 					return "BACKWARD"
 
@@ -316,22 +321,22 @@ def motor_logic(queue: multiprocessing.Queue) -> None:
 	lab = Labyrinth("COM3") # TODO: FIX THIS HARDCODING, MAKE IT SELECTABLE FROM THE GUI
 	while True:
 		# Pick item from the queue.
-		action_list = queue.get()
+		action = queue.get()
 		# Handle certain special cases.
-		if action_list == "end": # to be called at program exit
+		if action == "end": # to be called at program exit
 			break
-		if action_list == "reset": # to be called at braingame.stop_game
+		elif action == "reset": # to be called at braingame.stop_game
 			# TODO: Return to starting configuration.
 			continue
 		# Act according to action.
-		[act1, act2] = action_list
-		if act1 == "LEFT":
+		print(action)
+		if action == "LEFT":
 			lab.turn_left(1)
-		elif act1 == "RIGHT":
+		elif action == "RIGHT":
 			lab.turn_right(1)
-		if act2 == "FORWARD":
+		elif action == "FORWARD":
 			lab.turn_left(2)
-		elif act2 == "BACKWARD":
+		elif action == "BACKWARD":
 			lab.turn_right(2)
 	# Safely shut down program.
 	lab.__del__()
@@ -348,7 +353,7 @@ class GameLogic(Board):
 		self.p1 = Player(board_shim, active_channels, active_channels[0], q1)
 		self.p2 = Player(board_shim, active_channels, active_channels[1], q2)
 		self.filter = FilterData(board_shim, active_channels)
-		self.act = Action()
+		self.act = Action(self.sampling_rate)
 		if init_data is not None:
 			self.init_data = init_data
 		else: 
@@ -538,7 +543,11 @@ class BrainGameInterface:
 		# Update game logic one step, collect game info.
 		quantities, actions, data = self.gamelogic.update()
 		# Send actions to the motor logic
-		self.queue.put(actions) # TODO: SEND ACTIONS
+		[act1, act2] = actions
+		if act1 is not None:
+			self.queue.put(act1) # TODO: SEND ACTIONS
+		if act2 is not None:
+			self.queue.put(act2) # TODO: SEND ACTIONS
 		# Save quantities to enable game restarts from old data.
 		self.previous_data = data
 		self.previous_quantities = quantities
