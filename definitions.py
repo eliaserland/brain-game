@@ -195,7 +195,7 @@ labels = {
 	},
 	"info_game": {
 		"eng": "Short, fun and engaging tagline or description of the game, shorter than the help dialogue, but still useful.", 
-		"swe": "Kort, rolig och engagerande beskrivning av spelet, kortare än hjälp-dialogen, men fortfarande användbar.",
+		"swe": "Försök att lösa labyrinten med din kompis genom att blunda och slappna av!",
 	},
 	"loading_applying": {
 		"eng": "Applying settings...",
