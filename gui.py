@@ -37,6 +37,7 @@ class GUI:
 		self.flags = [[True, False, False], [True, False, False]]
 		self.p1_last_action = ""
 		self.p2_last_action = ""
+		self.fresh_start = True
 		
 		# Create and initialize all GUI windows.
 		self.__create_welcome_window()
@@ -208,7 +209,7 @@ class GUI:
 
 			# series belong to a y axis
 			dpg.add_line_series(list(range(10)), list(np.ones(10)), parent=item_id['axes']['metric1_yaxis'], tag=item_id['line_series']['metric1'])
-			dpg.set_axis_limits(item_id['axes']['metric1_yaxis'], -0.005, 1.005)
+			dpg.set_axis_limits(item_id['axes']['metric1_yaxis'], -0.05, 1.05)
 			dpg.set_axis_limits(item_id['axes']['metric1_xaxis'], -5, 0)
 		
 		with dpg.plot(label=labels['p2_me_title'][lang], tag=item_id['plots']['metric2'],  anti_aliased=True):
@@ -218,7 +219,7 @@ class GUI:
 
 			# series belong to a y axis
 			dpg.add_line_series(list(range(10)), list(np.ones(10)), parent=item_id['axes']['metric2_yaxis'], tag=item_id['line_series']['metric2'])
-			dpg.set_axis_limits(item_id['axes']['metric2_yaxis'], -0.005, 1.005)
+			dpg.set_axis_limits(item_id['axes']['metric2_yaxis'], -0.05, 1.05)
 			dpg.set_axis_limits(item_id['axes']['metric2_xaxis'], -5, 0)
 
 		# --- STATUS INDICATORS ---
@@ -392,9 +393,16 @@ class GUI:
 		else:
 			raise BaseException
 
-#self.trigger_action_animation(1, 0) # TODO: USE THIS SOMEWHERE
-
-
+	def trigger_action(self, actions): # TODO: REDO THIS AND COMBINE WITH trigger_action_animation
+		[act1, act2] = actions
+		if act1 == "LEFT":
+			self.trigger_action_animation(0, 0)
+		elif act1 == "RIGHT":
+			self.trigger_action_animation(0, 1)
+		if act2 == "FORWARD":
+			self.trigger_action_animation(1, 0)
+		elif act2 == "BACKWARD":
+			self.trigger_action_animation(1, 1)
 
 	def callback_enter_game(self):
 		"""
@@ -447,6 +455,7 @@ class GUI:
 
 		# Reset help dialogue status.
 		self.have_shown_help_dialogue = False
+		self.fresh_start = True
 
 
 	def propagate_settings(self) -> list:
@@ -537,6 +546,7 @@ class GUI:
 				__enable_cancel_button()
 				self.settings_are_applied = True
 			self.last_working_settings = settings_candidate # Save working settings.
+			self.fresh_start = True # Start game fresh, not from old data
 		else:
 			# Failure occured while attempting to load settings.
 			dpg.configure_item(item_id['text']['loading'], default_value=labels['loading_failure'][lang], pos=(95, 25))
@@ -756,7 +766,8 @@ class GUI:
 			try:
 				logging.info("GUI: Starting game")
 				# Start the main game.
-				self.braingame.start_game(fresh_start=False)
+				self.braingame.start_game(fresh_start=self.fresh_start)
+				self.fresh_start = False
 				# Set flag & start the gui plotting thread.
 				self.braingame_is_running = True
 				self.thread = threading.Thread(target=self.__gui_loop, daemon=False)
@@ -782,15 +793,16 @@ class GUI:
 
 	def __gui_loop(self):
 		"""Main thread function for updating the GUI plots during a game."""
-		fps_timer = FPS()
+		#fps_timer = FPS()
 		while self.braingame_is_running:
 			# Increment game logic, get data and update graphs.
 			quantities, actions, data  = self.braingame.update_game()
 			self.__update_plots((quantities, actions))
-			
+			# Trigger action animations of status icons
+			self.trigger_action(actions)
 			# Print fps counter
-			fps = fps_timer.calc()
-			print(f"FPS: {fps:.3f}", end='\r')
+			#fps = fps_timer.calc()
+			#print(f"FPS: {fps:.3f}", end='\r')
 
 	def callback_stop_game(self, reset_game=False) -> None:
 		"""Callback to stop and end a running game."""

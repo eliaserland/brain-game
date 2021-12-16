@@ -1,8 +1,6 @@
 import pyfirmata
-import time
 
 class Labyrinth():
-
 	def __init__(self, usb_port):
 		#Establishes the connection between the Arduino and the python scripts. 
 		#It also sets the start angles for the servos.

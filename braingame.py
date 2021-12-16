@@ -4,9 +4,11 @@ import time
 import logging
 from typing import Any
 import numpy as np
+from scipy import signal
 from collections import deque
 import threading
 import multiprocessing
+from labyrinth import Labyrinth
 
 from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds, BrainFlowError
 from brainflow.data_filter import DataFilter, FilterTypes, AggOperations, NoiseTypes, WindowFunctions, DetrendOperations
@@ -235,18 +237,9 @@ class FilterData(Board):
 			DataFilter.detrend(data[channel], DetrendOperations.LINEAR.value)
 			# Notch filter, remove 50Hz AC interference.
 			DataFilter.remove_environmental_noise(data[channel], self.sampling_rate, NoiseTypes.FIFTY)
-			
 			# Bandpass filter
-			#DataFilter.perform_wavelet_denoising(data[channel], 'coif3', 3)
-			#DataFilter.perform_rolling_filter(data[channel], 3, AggOperations.MEDIAN.value)
-			DataFilter.perform_rolling_filter(data[channel], 3, AggOperations.MEAN.value)
-			DataFilter.perform_bandpass(data[channel], self.sampling_rate, 40.0, 90.0, 2,
+			DataFilter.perform_bandpass(data[channel], self.sampling_rate, 30.0, 40.0, 2,
 			                            FilterTypes.BUTTERWORTH.value, 0)
-			DataFilter.perform_highpass(data[channel], self.sampling_rate, 0.1, 2, FilterTypes.BUTTERWORTH.value, 0)
-			#DataFilter.perform_bandpass(data[channel], self.sampling_rate, 51.0, 100.0, 2,
-			#                            FilterTypes.BUTTERWORTH.value, 0)
-			#DataFilter.perform_bandstop(data[channel], self.sampling_rate, 4, 4.0, 2,
-			#                           FilterTypes.BUTTERWORTH.value, 0)
 			DataFilter.perform_bandstop(data[channel], self.sampling_rate, 100.0, 4.0, 2,
 			                            FilterTypes.BUTTERWORTH.value, 0)
 class Action:
@@ -261,92 +254,88 @@ class Action:
 		#self._act_player1(p1_action)
 		#self._act_player2(p1_action)
 		
-		actions = [self.p1_actions[p1_action], self.p2_actions[p2_action]]
+		actions = [p1_action, p2_action]
 		return actions
 
-	def _decide(self, quantity: dict[str, Any], threshold: int=0.5):
-		_, metric_series = quantity['focus_metric']
-		metric_val = metric_series[-1] # TODO: Implement smarter selection than this.
-		if metric_val < threshold:
-			return 0
-		else:
-			return 1
+	def _decide(self, quantity: dict[str, Any], player: int):
+		(metric_time, metric) = quantity['focus_metric']
+		peaks, _ = signal.find_peaks(metric, height=0.900, width=65)
 
-	#def _act_player1(self, action: int):
-	#	"""Wrapper to call external motor control."""
-	#	if action:
-	#		pass # Higher than threshold. # TODO: implement this
-	#	else:
-	#		pass # Lower than threshold.  # TODO: implement this
+		# For every peak
+		for peak in peaks:
+			if self.old_peaks[player]:
+				t = metric_time[peak]
+				comparison = np.abs(t - np.array(self.old_peaks[player]))
+				min_dt = np.min(comparison)
 
-	#def _act_player2(self, action):
-	#	"""Wrapper to call external motor control."""
-	#	if action:
-	#		pass # Higher than threshold. # TODO: implement this
-	#	else:
-	#		pass # Lower than threshold.  # TODO: implement this
-
-
-#class MotorLogic:
-#	def __init__(self) -> None:
-#		pass
-#		# lab = LabyrintStyrning()
-#
-#	def vote(self, quantities: list[dict[str, Any]]):
-#		pass
-#
-#	def start_motor_control(self):
-#		self.motors_are_running = True
-#		self.motor_thread = threading.Thread(target=self.__motor_update_loop, daemon=False)
-#		self.motor_thread.start()
-#
-#	def stop_motor_control(self):
-#		self.motors_are_running = False
-#		self.motor_thread.join()
-	
-#	def __motor_update_loop(self):
-#	self.queue	"""Thread function for motor control logic."""
-#		while self.motors_are_running:
-			# Wait for queue to be not empty
-
-			# Take item from queue.
-
-			# Send command to motors.
-#			pass
+				if min_dt < 15/self.sampling_rate:
+					return None # Samma peak som tidigare
+				else:
+					# Ny peak
+					if player == 0: # PLAYER ONE
+						self.old_peaks[player].append(t)
+						print('YES APPEND PLAYER ONE')
+						if self.position_1 == 0:
+							#Labyrint.turn_left(1)
+							self.position_1 = 1
+							return "LEFT"
+						elif self.position_1 == 1:
+							#Labyrint.turn_right(1)
+							self.position_1 = 0
+							return "RIGHT"
+					else: # PLAYER TWO
+						self.old_peaks[player].append(t)
+						print('YES APPEND PLAYER TWO')
+						if self.position_2 == 0:
+							#Labyrint.turn_left(2)
+							self.position_2 = 1
+							return "FORWARD"
+						elif self.position_2 == 1:
+							#Labyrint.turn_right(2)
+							self.position_2 = 0
+							return "BACKWARD"
+			else:
+				# First peak
+				if player == 0:
+					self.old_peaks[player].append(metric_time[peak])
+					#print("OLD PEAKS OG = ",self.old_peaks)
+					print("OG APPEND PLAYER ONE")
+					#Labyrint.turn_right(1)
+					self.position_1 = 0
+					return "RIGHT"
+				else:
+					self.old_peaks[player].append(metric_time[peak])
+					#print("OLD PEAKS OG = ",self.old_peaks)
+					print("OG APPEND PLAYER TWO")
+					#Labyrint.turn_right(2)
+					self.position_2 = 0
+					return "BACKWARD"
 
 def motor_logic(queue: multiprocessing.Queue) -> None:
 	"""Main function to handle interface with servos."""
-	# lab = LabyrintStyrning()
+	lab = Labyrinth("COM3") # TODO: FIX THIS HARDCODING, MAKE IT SELECTABLE FROM THE GUI
 	while True:
 		# Pick item from the queue.
-		action = queue.get()
+		action_list = queue.get()
 		# Handle certain special cases.
-		if action == "end": # to be called at program exit
+		if action_list == "end": # to be called at program exit
 			break
-		if action == "reset": # to be called at braingame.stop_game
+		if action_list == "reset": # to be called at braingame.stop_game
 			# TODO: Return to starting configuration.
 			continue
 		# Act according to action.
-		#lab.turn_right(1)
-		#lab.turn_left(1)
-		#print(action)
-	
+		[act1, act2] = action_list
+		if act1 == "LEFT":
+			lab.turn_left(1)
+		elif act1 == "RIGHT":
+			lab.turn_right(1)
+		if act2 == "FORWARD":
+			lab.turn_left(2)
+		elif act2 == "BACKWARD":
+			lab.turn_right(2)
 	# Safely shut down program.
-	#lab.__del__()
+	lab.__del__()
 
-"""
-def motor_loop(queue: multiprocessing.Queue):
-	#lab = LabyrintStyrning()
-	while True:
-		action = queue.get()
-		if action == "stop":
-			queue.task_done()
-			break
-		# Act according to action
-		#lab.turn_right(1)
-		#lab.turn_left(1)
-		queue.task_done()
-"""
 
 class GameLogic(Board):
 	"""Class containing and collecting the main game logic."""
