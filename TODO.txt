@@ -1,0 +1,43 @@
+- help always showing after successful settings application -- CHECK
+- stop button theme needs to toggle when help/settings open -- CHECK
+- language toggle buttons -- CHECK
+- language toggle framework -- CHECK
+- language translations -- CHECK
+- complete all translations -- CHECK
+- pulsating "press enter" phrase -- CHECK
+- adjust sizes to fit both languages -- CHECK
+- add language toggles to welcome screen -- CHECK
+- set minimum size of viewport -- CHECK
+- Reorganize existing graphs -- CHECK
+- add bar graphs -- CHECK
+- logic for updating the bar graphs -- CHECK
+- add bottom labyrint direction/rotation indicators -- CHECK
+- create callbacks for switching directions -- CHECK
+- animate the switches for increased emphasis (?) -- CHECK
+- add logic for updating direction indicators -- CHECK
+
+- re-center and scale everything
+- figure out motor-thread loop
+- save and carry over data between restarts
+- COM port selector (and search?) via settings menu
+- channel selector via settings menu
+- yaxis limit selector via settings menu (?) or via DPG native controls
+- Update all logging, improve and make clearer
+- Organize all resizing and rescaling
+- initial data for plots
+- "minimalist" toggle, remove all clutter, tick and axis labels
+- figure out laggy trailing behaviour focus metric player 1
+- make time window adjustable via settings menu
+- make settings menu and help dialogue maneouverable via keyboard
+- large "PLAYER 1", "PLAYER 2" names at top of window instead in every plot title (?)
+- decide on optimal width of side column in main screen
+- fix window size loading screen multi language support
+
+- figure out "pure virtual method called" crash
+
+- transplant of filtering 
+- transplant of find_peaks
+- transplant of Labyrinth
+
+
+
